@@ -45,6 +45,64 @@ const lyricsComponent: SceneComponentDefinition<{ lyricSize: number; lyricFont: 
   Component: () => null
 };
 
+const equalizerComponent: SceneComponentDefinition<{
+  placement: string;
+  barCount: number;
+  analysisFps: number;
+  sensitivity: number;
+  bandDistribution: string;
+}> = {
+  id: "equalizer",
+  name: "Equalizer",
+  options: [
+    {
+      type: "category",
+      id: "placement",
+      label: "Placement",
+      options: [
+        {
+          type: "select",
+          id: "placement",
+          label: "Placement",
+          defaultValue: "bottom-center",
+          options: [
+            { label: "Bottom Center", value: "bottom-center" },
+            { label: "Top Center", value: "top-center" }
+          ]
+        }
+      ]
+    },
+    {
+      type: "category",
+      id: "bars",
+      label: "Bars",
+      options: [
+        { type: "number", id: "barCount", label: "Bar Count", defaultValue: 28, min: 4, max: 64 },
+        { type: "number", id: "analysisFps", label: "Analysis FPS", defaultValue: 48, min: 10, max: 120 },
+        { type: "number", id: "sensitivity", label: "Sensitivity", defaultValue: 1.4, min: 0.1, max: 4, step: 0.1 },
+        {
+          type: "select",
+          id: "bandDistribution",
+          label: "Band Distribution",
+          defaultValue: "log",
+          options: [
+            { label: "Linear", value: "linear" },
+            { label: "Log", value: "log" }
+          ]
+        }
+      ]
+    }
+  ],
+  defaultOptions: {
+    placement: "bottom-center",
+    barCount: 28,
+    analysisFps: 48,
+    sensitivity: 1.4,
+    bandDistribution: "log"
+  },
+  Component: () => null
+};
+
 const scene: SerializedSceneDefinition = {
   id: "test-scene",
   name: "Test Scene",
@@ -62,6 +120,12 @@ const scene: SerializedSceneDefinition = {
     {
       id: "lyrics-1",
       componentId: "lyrics-by-line",
+      enabled: true,
+      options: {}
+    },
+    {
+      id: "equalizer-1",
+      componentId: "equalizer",
       enabled: true,
       options: {}
     }
@@ -84,6 +148,18 @@ describe("scene validation", () => {
     });
   });
 
+  it("applies equalizer defaults from categorized options", () => {
+    const result = validateSceneOptions(equalizerComponent, {});
+
+    expect(result).toEqual({
+      placement: "bottom-center",
+      barCount: 28,
+      analysisFps: 48,
+      sensitivity: 1.4,
+      bandDistribution: "log"
+    });
+  });
+
   it("validates a stacked scene with duplicate component types", () => {
     const result = validateSceneComponents(
       {
@@ -100,7 +176,7 @@ describe("scene validation", () => {
           }
         ]
       },
-      [backgroundImageComponent, lyricsComponent],
+      [backgroundImageComponent, lyricsComponent, equalizerComponent],
       {
         isFileAccessible: () => true
       }
@@ -124,6 +200,19 @@ describe("scene validation", () => {
         options: {
           lyricSize: 72,
           lyricFont: SUPPORTED_FONT_FAMILIES[0]
+        }
+      },
+      {
+        id: "equalizer-1",
+        componentId: "equalizer",
+        componentName: "Equalizer",
+        enabled: true,
+        options: {
+          placement: "bottom-center",
+          barCount: 28,
+          analysisFps: 48,
+          sensitivity: 1.4,
+          bandDistribution: "log"
         }
       },
       {
@@ -153,14 +242,14 @@ describe("scene validation", () => {
             }
           ]
         },
-        [backgroundImageComponent, lyricsComponent]
+        [backgroundImageComponent, lyricsComponent, equalizerComponent]
       )
     ).toThrow(/Unknown scene component/);
   });
 
   it("rejects missing image assets", () => {
     expect(() =>
-      validateSceneComponents(scene, [backgroundImageComponent, lyricsComponent], {
+      validateSceneComponents(scene, [backgroundImageComponent, lyricsComponent, equalizerComponent], {
         isFileAccessible: () => false
       })
     ).toThrow(/does not point to a readable file/);
@@ -183,12 +272,20 @@ describe("scene validation", () => {
             }
           ]
         },
-        [backgroundImageComponent, lyricsComponent],
+        [backgroundImageComponent, lyricsComponent, equalizerComponent],
         {
           isFileAccessible: () => true
         }
       )
     ).toThrow(/not a supported font selection/);
+  });
+
+  it("rejects equalizer values outside numeric bounds", () => {
+    expect(() =>
+      validateSceneOptions(equalizerComponent, {
+        barCount: 128
+      })
+    ).toThrow(/must be at most 64/);
   });
 
   it("round-trips scene files", () => {

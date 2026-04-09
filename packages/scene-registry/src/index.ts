@@ -6,10 +6,12 @@ import {
   lyricsByLineComponent,
   singleImageLyricsScene
 } from "./single-image-lyrics";
+import { equalizerComponent } from "./equalizer";
 
 export {
   backgroundColorComponent,
   backgroundImageComponent,
+  equalizerComponent,
   builtInSceneComponents,
   lyricsByLineComponent,
   singleImageLyricsScene

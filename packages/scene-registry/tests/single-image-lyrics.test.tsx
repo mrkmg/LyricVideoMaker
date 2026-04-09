@@ -7,9 +7,10 @@ import { createLyricRuntime } from "@lyric-video-maker/core";
 import {
   backgroundColorComponent,
   backgroundImageComponent,
+  equalizerComponent,
   lyricsByLineComponent,
   singleImageLyricsScene
-} from "../src/single-image-lyrics";
+} from "../src";
 
 describe("scene registry components", () => {
   it("renders the background image component with the instance-scoped asset url", () => {
@@ -184,5 +185,117 @@ describe("scene registry components", () => {
         options: {}
       }
     ]);
+  });
+
+  it("prepares equalizer frames from audio analysis", async () => {
+    const getSpectrum = vi.fn().mockResolvedValue({
+      fps: 30,
+      frameCount: 60,
+      bandCount: 4,
+      values: [
+        [0.1, 0.2, 0.3, 0.4],
+        [0.4, 0.3, 0.2, 0.1]
+      ]
+    });
+
+    const prepared = await equalizerComponent.prepare!({
+      instance: {
+        id: "equalizer-1",
+        componentId: "equalizer",
+        componentName: "Equalizer",
+        enabled: true,
+        options: {}
+      },
+      options: equalizerComponent.defaultOptions,
+      video: {
+        width: 1920,
+        height: 1080,
+        fps: 30,
+        durationMs: 2000,
+        durationInFrames: 60
+      },
+      lyrics: createLyricRuntime([], 0),
+      assets: {
+        getPath: vi.fn(),
+        getUrl: vi.fn()
+      },
+      audio: {
+        path: "song.mp3",
+        getSpectrum
+      }
+    });
+
+    expect(getSpectrum).toHaveBeenCalledWith({
+      bandCount: 28,
+      minFrequency: 40,
+      maxFrequency: 3200,
+      analysisFps: 48,
+      sensitivity: 1.4,
+      smoothing: 35,
+      attackMs: 35,
+      releaseMs: 240,
+      silenceFloor: 8,
+      bandDistribution: "log"
+    });
+    expect(prepared).toEqual({
+      frames: [
+        [0.1, 0.2, 0.3, 0.4],
+        [0.4, 0.3, 0.2, 0.1]
+      ]
+    });
+  });
+
+  it("renders the equalizer with placement, plate, and configured bars", () => {
+    render(
+      equalizerComponent.Component({
+        instance: {
+          id: "equalizer-1",
+          componentId: "equalizer",
+          componentName: "Equalizer",
+          enabled: true,
+          options: {}
+        },
+        options: {
+          ...equalizerComponent.defaultOptions,
+          placement: "right-center",
+          alignment: "end",
+          barCount: 4,
+          layoutMode: "split",
+          backgroundPlateEnabled: true,
+          backgroundPlateOpacity: 40
+        },
+        frame: 1,
+        timeMs: 33,
+        video: {
+          width: 1920,
+          height: 1080,
+          fps: 30,
+          durationMs: 2000,
+          durationInFrames: 60
+        },
+        lyrics: createLyricRuntime([], 0),
+        assets: {
+          getUrl: vi.fn()
+        },
+        prepared: {
+          frames: [
+            [0.2, 0.4, 0.6, 0.8],
+            [0.8, 0.6, 0.4, 0.2]
+          ]
+        }
+      })
+    );
+
+    expect(document.querySelector("[data-equalizer-plate]")).toBeTruthy();
+    expect(document.querySelectorAll("[data-equalizer-bar]")).toHaveLength(4);
+    const track = document.querySelector("[data-equalizer-track]");
+    expect(track).toHaveStyle({
+      flexDirection: "column"
+    });
+    const wrapper = track?.parentElement as HTMLElement;
+    expect(wrapper.style.right).toBe("24px");
+    expect(wrapper.style.bottom).toBe("0px");
+    expect(wrapper.style.width).toBe("14%");
+    expect(wrapper.style.height).toBe("56%");
   });
 });

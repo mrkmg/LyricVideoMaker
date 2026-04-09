@@ -81,6 +81,28 @@ export interface SceneAssetAccessor {
   getUrl(instanceId: string, optionId: string): string | null;
 }
 
+export type SceneAudioBandDistribution = "linear" | "log";
+
+export interface SceneAudioAnalysisRequest {
+  bandCount: number;
+  minFrequency: number;
+  maxFrequency: number;
+  analysisFps: number;
+  sensitivity: number;
+  smoothing: number;
+  attackMs: number;
+  releaseMs: number;
+  silenceFloor: number;
+  bandDistribution: SceneAudioBandDistribution;
+}
+
+export interface SceneAudioAnalysisResult {
+  fps: number;
+  frameCount: number;
+  bandCount: number;
+  values: number[][];
+}
+
 export type PreparedSceneComponentData = Record<string, unknown>;
 export type PreparedSceneStackData = Record<string, PreparedSceneComponentData>;
 export type SceneSource = "built-in" | "user";
@@ -102,6 +124,10 @@ export interface ScenePrepareContext<TOptions> {
   video: VideoSettings;
   lyrics: LyricRuntime;
   assets: SceneAssetAccessor;
+  audio: {
+    path: string;
+    getSpectrum(request: SceneAudioAnalysisRequest): Promise<SceneAudioAnalysisResult>;
+  };
   signal?: AbortSignal;
 }
 

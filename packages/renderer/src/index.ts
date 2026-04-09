@@ -17,6 +17,7 @@ import {
   type SceneComponentDefinition,
   type ValidatedSceneComponentInstance
 } from "@lyric-video-maker/core";
+import { createAudioAnalysisAccessor } from "./audio-analysis";
 
 export interface RenderLyricVideoInput {
   job: RenderJob;
@@ -93,6 +94,12 @@ export async function renderLyricVideo({
   const enabledComponents = job.components.filter((component) => component.enabled);
   const preloadedAssets = await preloadSceneAssets(enabledComponents, componentLookup, job.video, logger, signal);
   const assets = createAssetAccessor(enabledComponents, preloadedAssets);
+  const audio = createAudioAnalysisAccessor({
+    audioPath: job.audioPath,
+    video: job.video,
+    signal,
+    logger
+  });
   let muxerFinished = false;
 
   progress.emit({
@@ -121,6 +128,7 @@ export async function renderLyricVideo({
           video: job.video,
           lyrics: initialLyrics,
           assets,
+          audio,
           signal,
           logger
         });
@@ -483,6 +491,7 @@ async function prepareSceneComponents(
     video: RenderJob["video"];
     lyrics: ReturnType<typeof createLyricRuntime>;
     assets: SceneAssetAccessor;
+    audio: ReturnType<typeof createAudioAnalysisAccessor>;
     signal?: AbortSignal;
     logger: RenderLogger;
   }
@@ -502,6 +511,7 @@ async function prepareSceneComponents(
         video: context.video,
         lyrics: context.lyrics,
         assets: context.assets,
+        audio: context.audio,
         signal: context.signal
       })) ?? {};
 

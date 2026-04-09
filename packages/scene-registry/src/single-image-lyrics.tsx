@@ -1,6 +1,7 @@
 import React from "react";
 import type { SceneComponentDefinition, SceneDefinition } from "@lyric-video-maker/core";
 import { SUPPORTED_FONT_FAMILIES } from "@lyric-video-maker/core";
+import { equalizerComponent } from "./equalizer";
 
 type LyricFadeEasing = "linear" | "ease-in" | "ease-out" | "ease-in-out";
 type LyricVerticalPosition = "top" | "middle" | "bottom";
@@ -314,7 +315,8 @@ export const lyricsByLineComponent: SceneComponentDefinition<LyricsByLineOptions
 export const builtInSceneComponents: SceneComponentDefinition<Record<string, unknown>>[] = [
   backgroundImageComponent as unknown as SceneComponentDefinition<Record<string, unknown>>,
   backgroundColorComponent as unknown as SceneComponentDefinition<Record<string, unknown>>,
-  lyricsByLineComponent as unknown as SceneComponentDefinition<Record<string, unknown>>
+  lyricsByLineComponent as unknown as SceneComponentDefinition<Record<string, unknown>>,
+  equalizerComponent as unknown as SceneComponentDefinition<Record<string, unknown>>
 ];
 
 export const singleImageLyricsScene: SceneDefinition = {
