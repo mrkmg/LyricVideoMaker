@@ -1,21 +1,9 @@
 import React from "react";
-import type { SceneComponentDefinition, SceneDefinition } from "@lyric-video-maker/core";
+import type { SceneComponentDefinition } from "@lyric-video-maker/core";
 import { SUPPORTED_FONT_FAMILIES } from "@lyric-video-maker/core";
-import { equalizerComponent } from "./equalizer";
 
 type LyricFadeEasing = "linear" | "ease-in" | "ease-out" | "ease-in-out";
 type LyricVerticalPosition = "top" | "middle" | "bottom";
-
-export interface BackgroundImageOptions {
-  imagePath: string;
-}
-
-export interface BackgroundColorOptions {
-  topColor: string;
-  topOpacity: number;
-  bottomColor: string;
-  bottomOpacity: number;
-}
 
 export interface LyricsByLineOptions {
   lyricSize: number;
@@ -33,93 +21,6 @@ export interface LyricsByLineOptions {
   shadowColor: string;
   shadowIntensity: number;
 }
-
-export const backgroundImageComponent: SceneComponentDefinition<BackgroundImageOptions> = {
-  id: "background-image",
-  name: "Background Image",
-  description: "Covers the frame with one full-song image.",
-  staticWhenMarkupUnchanged: true,
-  options: [{ type: "image", id: "imagePath", label: "Background Image", required: true }],
-  defaultOptions: {
-    imagePath: ""
-  },
-  Component: ({ instance, assets }) => {
-    const imageUrl = assets.getUrl(instance.id, "imagePath");
-    if (!imageUrl) {
-      return null;
-    }
-
-    return (
-      <img
-        src={imageUrl}
-        alt=""
-        style={{
-          position: "absolute",
-          inset: 0,
-          width: "100%",
-          height: "100%",
-          objectFit: "cover",
-          transform: "scale(1.03)"
-        }}
-      />
-    );
-  }
-};
-
-export const backgroundColorComponent: SceneComponentDefinition<BackgroundColorOptions> = {
-  id: "background-color",
-  name: "Background Color",
-  description: "Adds a gradient color wash over the full frame.",
-  staticWhenMarkupUnchanged: true,
-  options: [
-    {
-      type: "category",
-      id: "background",
-      label: "Background",
-      defaultExpanded: false,
-      options: [
-        { type: "color", id: "topColor", label: "Color Top", defaultValue: "#09090f" },
-        {
-          type: "number",
-          id: "topOpacity",
-          label: "Color Top Opacity",
-          defaultValue: 60,
-          min: 0,
-          max: 100,
-          step: 1
-        },
-        { type: "color", id: "bottomColor", label: "Color Bottom", defaultValue: "#09090f" },
-        {
-          type: "number",
-          id: "bottomOpacity",
-          label: "Color Bottom Opacity",
-          defaultValue: 60,
-          min: 0,
-          max: 100,
-          step: 1
-        }
-      ]
-    }
-  ],
-  defaultOptions: {
-    topColor: "#09090f",
-    topOpacity: 60,
-    bottomColor: "#09090f",
-    bottomOpacity: 60
-  },
-  Component: ({ options }) => (
-    <div
-      style={{
-        position: "absolute",
-        inset: 0,
-        background: `linear-gradient(180deg, ${withAlpha(options.topColor, options.topOpacity / 100)} 0%, ${withAlpha(
-          options.bottomColor,
-          options.bottomOpacity / 100
-        )} 100%)`
-      }}
-    />
-  )
-};
 
 export const lyricsByLineComponent: SceneComponentDefinition<LyricsByLineOptions> = {
   id: "lyrics-by-line",
@@ -310,41 +211,6 @@ export const lyricsByLineComponent: SceneComponentDefinition<LyricsByLineOptions
       </div>
     );
   }
-};
-
-export const builtInSceneComponents: SceneComponentDefinition<Record<string, unknown>>[] = [
-  backgroundImageComponent as unknown as SceneComponentDefinition<Record<string, unknown>>,
-  backgroundColorComponent as unknown as SceneComponentDefinition<Record<string, unknown>>,
-  lyricsByLineComponent as unknown as SceneComponentDefinition<Record<string, unknown>>,
-  equalizerComponent as unknown as SceneComponentDefinition<Record<string, unknown>>
-];
-
-export const singleImageLyricsScene: SceneDefinition = {
-  id: "single-image-lyrics",
-  name: "Single Image Lyrics",
-  description: "A full-song lyric video with one background image, optional color wash, and stylable lyric placement.",
-  source: "built-in",
-  readOnly: true,
-  components: [
-    {
-      id: "background-image-1",
-      componentId: "background-image",
-      enabled: true,
-      options: {}
-    },
-    {
-      id: "background-color-1",
-      componentId: "background-color",
-      enabled: false,
-      options: {}
-    },
-    {
-      id: "lyrics-by-line-1",
-      componentId: "lyrics-by-line",
-      enabled: true,
-      options: {}
-    }
-  ]
 };
 
 function getLyricBlockStyles(position: LyricVerticalPosition) {

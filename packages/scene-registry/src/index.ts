@@ -3,10 +3,10 @@ import {
   backgroundColorComponent,
   backgroundImageComponent,
   builtInSceneComponents,
-  lyricsByLineComponent,
-  singleImageLyricsScene
-} from "./single-image-lyrics";
-import { equalizerComponent } from "./equalizer";
+  equalizerComponent,
+  lyricsByLineComponent
+} from "./components";
+import { singleImageLyricsScene } from "./scenes/single-image-lyrics";
 
 export {
   backgroundColorComponent,
