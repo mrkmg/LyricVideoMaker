@@ -117,6 +117,8 @@ describe("scene registry components", () => {
         },
         options: {
           lyricSize: 80,
+          forceSingleLine: false,
+          horizontalPadding: 96,
           lyricFont: "Montserrat",
           lyricColor: "#ffffff",
           fadeInDurationMs: 200,
@@ -160,8 +162,62 @@ describe("scene registry components", () => {
     );
     expect(lyricContainer).toHaveStyle({
       alignItems: "flex-start",
-      padding: "110px 140px 0"
+      padding: "110px 96px 0"
     });
+  });
+
+  it("forces multi-line lyrics onto a single fitted line when enabled", () => {
+    const lyrics = createLyricRuntime(
+      [
+        {
+          index: 1,
+          startMs: 0,
+          endMs: 2000,
+          text: "This is a very long lyric line\nthat would normally wrap",
+          lines: ["This is a very long lyric line", "that would normally wrap"]
+        }
+      ],
+      500
+    );
+
+    render(
+      lyricsByLineComponent.Component({
+        instance: {
+          id: "lyrics-1",
+          componentId: "lyrics-by-line",
+          componentName: "Lyrics by Line",
+          enabled: true,
+          options: {}
+        },
+        options: {
+          ...lyricsByLineComponent.defaultOptions,
+          lyricSize: 80,
+          forceSingleLine: true,
+          horizontalPadding: 40
+        },
+        frame: 15,
+        timeMs: 500,
+        video: {
+          width: 600,
+          height: 1080,
+          fps: 30,
+          durationMs: 2000,
+          durationInFrames: 60
+        },
+        lyrics,
+        assets: {
+          getUrl: vi.fn()
+        },
+        prepared: {}
+      })
+    );
+
+    const lyricText = screen.getByText("This is a very long lyric line that would normally wrap");
+
+    expect(lyricText).toHaveStyle({
+      whiteSpace: "nowrap"
+    });
+    expect(Number.parseFloat((lyricText as HTMLElement).style.fontSize)).toBeLessThan(80);
   });
 
   it("defines the preset scene as stacked components in the expected order", () => {

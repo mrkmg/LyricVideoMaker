@@ -7,6 +7,8 @@ type LyricVerticalPosition = "top" | "middle" | "bottom";
 
 export interface LyricsByLineOptions {
   lyricSize: number;
+  forceSingleLine: boolean;
+  horizontalPadding: number;
   lyricFont: string;
   lyricColor: string;
   fadeInDurationMs: number;
@@ -34,6 +36,16 @@ export const lyricsByLineComponent: SceneComponentDefinition<LyricsByLineOptions
       label: "Lyrics",
       options: [
         { type: "number", id: "lyricSize", label: "Lyric Size", defaultValue: 72, min: 24, max: 180, step: 1 },
+        { type: "boolean", id: "forceSingleLine", label: "Force Single Line", defaultValue: false },
+        {
+          type: "number",
+          id: "horizontalPadding",
+          label: "Horizontal Padding",
+          defaultValue: 140,
+          min: 0,
+          max: 480,
+          step: 1
+        },
         { type: "font", id: "lyricFont", label: "Lyric Font", defaultValue: SUPPORTED_FONT_FAMILIES[0] },
         { type: "color", id: "lyricColor", label: "Lyric Color", defaultValue: "#FFFFFF" },
         {
@@ -148,6 +160,8 @@ export const lyricsByLineComponent: SceneComponentDefinition<LyricsByLineOptions
   ],
   defaultOptions: {
     lyricSize: 72,
+    forceSingleLine: false,
+    horizontalPadding: 140,
     lyricFont: SUPPORTED_FONT_FAMILIES[0],
     lyricColor: "#FFFFFF",
     fadeInDurationMs: 180,
@@ -162,16 +176,17 @@ export const lyricsByLineComponent: SceneComponentDefinition<LyricsByLineOptions
     shadowColor: "#000000",
     shadowIntensity: 55
   },
-  Component: ({ options, lyrics, timeMs }) => {
+  Component: ({ options, lyrics, timeMs, video }) => {
     const activeCue = lyrics.current;
-    const activeText = activeCue?.text ?? "";
+    const activeText = getRenderedLyricText(activeCue?.lines ?? [], activeCue?.text ?? "", options.forceSingleLine);
     const lyricOpacity = activeCue
       ? getLyricOpacity(activeCue.startMs, activeCue.endMs, timeMs, options)
       : 0;
-    const lyricBlockStyles = getLyricBlockStyles(options.lyricPosition);
+    const lyricBlockStyles = getLyricBlockStyles(options.lyricPosition, options.horizontalPadding);
+    const lyricFontSize = getRenderedLyricFontSize(activeText, options, video.width, lyricBlockStyles.horizontalPadding);
     const letterShadow =
       options.shadowEnabled && options.shadowIntensity > 0
-        ? createTextShadow(options.lyricSize, options.shadowColor, options.shadowIntensity)
+        ? createTextShadow(lyricFontSize, options.shadowColor, options.shadowIntensity)
         : "none";
     const letterStroke =
       options.borderEnabled && options.borderThickness > 0
@@ -196,12 +211,12 @@ export const lyricsByLineComponent: SceneComponentDefinition<LyricsByLineOptions
           style={{
             maxWidth: "100%",
             textAlign: "center",
-            fontSize: options.lyricSize,
+            fontSize: lyricFontSize,
             fontWeight: 700,
             lineHeight: 1.15,
             letterSpacing: "-0.03em",
             textShadow: letterShadow,
-            whiteSpace: "pre-wrap",
+            whiteSpace: options.forceSingleLine ? "nowrap" : "pre-wrap",
             opacity: lyricOpacity,
             WebkitTextStroke: letterStroke
           }}
@@ -213,25 +228,60 @@ export const lyricsByLineComponent: SceneComponentDefinition<LyricsByLineOptions
   }
 };
 
-function getLyricBlockStyles(position: LyricVerticalPosition) {
+function getLyricBlockStyles(position: LyricVerticalPosition, horizontalPadding: number) {
   switch (position) {
     case "top":
       return {
         alignItems: "flex-start" as const,
-        padding: "110px 140px 0"
+        padding: `110px ${horizontalPadding}px 0`,
+        horizontalPadding
       };
     case "middle":
       return {
         alignItems: "center" as const,
-        padding: "0 140px"
+        padding: `0 ${horizontalPadding}px`,
+        horizontalPadding
       };
     case "bottom":
     default:
       return {
         alignItems: "flex-end" as const,
-        padding: "0 140px 110px"
+        padding: `0 ${horizontalPadding}px 110px`,
+        horizontalPadding
       };
   }
+}
+
+function getRenderedLyricText(lines: string[], fallbackText: string, forceSingleLine: boolean) {
+  if (!forceSingleLine) {
+    return fallbackText;
+  }
+
+  return lines
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join(" ");
+}
+
+function getRenderedLyricFontSize(
+  text: string,
+  options: Pick<LyricsByLineOptions, "lyricSize" | "forceSingleLine">,
+  videoWidth: number,
+  horizontalPadding: number
+) {
+  if (!options.forceSingleLine || !text.trim()) {
+    return options.lyricSize;
+  }
+
+  const glyphCount = Array.from(text).length;
+  const availableWidth = Math.max(160, videoWidth - horizontalPadding * 2);
+  const estimatedWidthAtBaseSize = glyphCount * options.lyricSize * 0.58;
+
+  if (estimatedWidthAtBaseSize <= availableWidth) {
+    return options.lyricSize;
+  }
+
+  return Math.max(12, Math.floor((availableWidth / (glyphCount * 0.58)) * 10) / 10);
 }
 
 function getLyricOpacity(

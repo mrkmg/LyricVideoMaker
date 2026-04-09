@@ -131,6 +131,14 @@ button:hover:not(:disabled) {
   padding: 0.9rem 1rem;
 }
 
+.field select option,
+.field select optgroup,
+.option-input select option,
+.option-input select optgroup {
+  color: #10162a;
+  background: #f7f8fc;
+}
+
 .field textarea {
   resize: vertical;
   min-height: 120px;
@@ -199,6 +207,7 @@ button:hover:not(:disabled) {
 .top-level-options,
 .option-list {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.8rem;
 }
 
@@ -433,6 +442,11 @@ button:hover:not(:disabled) {
   .component-card-header {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .top-level-options,
+  .option-list {
+    grid-template-columns: 1fr;
   }
 
   .option-row {

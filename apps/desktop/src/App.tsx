@@ -25,6 +25,34 @@ interface ComposerState {
   video: Pick<VideoSettings, "width" | "height" | "fps">;
 }
 
+interface VideoSizePreset {
+  id: string;
+  label: string;
+  width: number;
+  height: number;
+}
+
+interface FpsPreset {
+  id: string;
+  label: string;
+  fps: number;
+}
+
+const VIDEO_SIZE_PRESETS: VideoSizePreset[] = [
+  { id: "4k", label: "4K (3840x2160)", width: 3840, height: 2160 },
+  { id: "2k", label: "2K (2560x1440)", width: 2560, height: 1440 },
+  { id: "1080", label: "1080p (1920x1080)", width: 1920, height: 1080 },
+  { id: "720", label: "720p (1280x720)", width: 1280, height: 720 },
+  { id: "1024-square", label: "1024 Square (1024x1024)", width: 1024, height: 1024 }
+];
+
+const FPS_PRESETS: FpsPreset[] = [
+  { id: "15", label: "15 fps", fps: 15 },
+  { id: "20", label: "20 fps", fps: 20 },
+  { id: "30", label: "30 fps", fps: 30 },
+  { id: "60", label: "60 fps", fps: 60 }
+];
+
 const emptyState: ComposerState = {
   audioPath: "",
   subtitlePath: "",
@@ -81,6 +109,13 @@ export function App() {
   const hasActiveRender = history.some((entry) =>
     ["queued", "preparing", "rendering", "muxing"].includes(entry.status)
   );
+  const selectedVideoSizePresetId =
+    VIDEO_SIZE_PRESETS.find(
+      (preset) =>
+        preset.width === composer.video.width && preset.height === composer.video.height
+    )?.id ?? "custom";
+  const selectedFpsPresetId =
+    FPS_PRESETS.find((preset) => preset.fps === composer.video.fps)?.id ?? "custom";
 
   useEffect(() => {
     if (!selectedScene) {
@@ -360,6 +395,56 @@ export function App() {
           </div>
 
           <div className="video-param-grid">
+            <SelectField
+              label="Size preset"
+              value={selectedVideoSizePresetId}
+              options={[
+                { value: "custom", label: "Custom" },
+                ...VIDEO_SIZE_PRESETS.map((preset) => ({ value: preset.id, label: preset.label }))
+              ]}
+              onChange={(value) => {
+                if (value === "custom") {
+                  return;
+                }
+
+                const preset = VIDEO_SIZE_PRESETS.find((entry) => entry.id === value);
+                if (!preset) {
+                  return;
+                }
+
+                setComposer((current) => ({
+                  ...current,
+                  video: {
+                    ...current.video,
+                    width: preset.width,
+                    height: preset.height
+                  }
+                }));
+              }}
+            />
+            <SelectField
+              label="FPS preset"
+              value={selectedFpsPresetId}
+              options={[
+                { value: "custom", label: "Custom" },
+                ...FPS_PRESETS.map((preset) => ({ value: preset.id, label: preset.label }))
+              ]}
+              onChange={(value) => {
+                if (value === "custom") {
+                  return;
+                }
+
+                const preset = FPS_PRESETS.find((entry) => entry.id === value);
+                if (!preset) {
+                  return;
+                }
+
+                setComposer((current) => ({
+                  ...current,
+                  video: { ...current.video, fps: preset.fps }
+                }));
+              }}
+            />
             <NumberField label="Width" value={composer.video.width} min={16} step={1} onChange={(value) => setComposer((current) => ({ ...current, video: { ...current.video, width: value } }))} />
             <NumberField label="Height" value={composer.video.height} min={16} step={1} onChange={(value) => setComposer((current) => ({ ...current, video: { ...current.video, height: value } }))} />
             <NumberField label="Frame rate" value={composer.video.fps} min={1} step={1} onChange={(value) => setComposer((current) => ({ ...current, video: { ...current.video, fps: value } }))} />
@@ -617,6 +702,31 @@ function NumberField({
     <label className="field">
       <span>{label}</span>
       <input type="number" min={min} max={max} step={step ?? 1} value={value} onChange={(event) => onChange(Number(event.target.value))} />
+    </label>
+  );
+}
+
+function SelectField({
+  label,
+  value,
+  options,
+  onChange
+}: {
+  label: string;
+  value: string;
+  options: Array<{ value: string; label: string }>;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="field">
+      <span>{label}</span>
+      <select value={value} onChange={(event) => onChange(event.target.value)}>
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
     </label>
   );
 }
