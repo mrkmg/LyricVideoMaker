@@ -1,74 +1,35 @@
 import { useEffect, useMemo, useState } from "react";
 import type {
   RenderHistoryEntry,
-  RenderProgressEvent,
-  SceneComponentInstance,
-  SceneOptionField,
-  SerializedSceneComponentDefinition,
-  SerializedSceneDefinition,
-  VideoSettings
+  SceneComponentInstance
 } from "@lyric-video-maker/core";
+import { isSceneOptionCategory } from "@lyric-video-maker/core";
 import {
-  DEFAULT_VIDEO_FPS,
-  DEFAULT_VIDEO_HEIGHT,
-  DEFAULT_VIDEO_WIDTH,
-  isSceneOptionCategory
-} from "@lyric-video-maker/core";
-import type { AppBootstrapData } from "./electron-api";
+  cloneComponent,
+  cloneScene,
+  createInstanceId,
+  createSceneComponentInstance,
+  emptyComposerState,
+  FPS_PRESETS,
+  getCategoryStateKey,
+  getFileName,
+  stripExtension,
+  upsertHistory,
+  upsertScene,
+  VIDEO_SIZE_PRESETS
+} from "./app-utils";
+import { RenderHistoryPanel } from "./components/render-history-panel";
+import { SceneLibraryPanel } from "./components/scene-library-panel";
+import { SourceFilesPanel } from "./components/source-files-panel";
+import { VideoSettingsPanel } from "./components/video-settings-panel";
 import type { ComposerState } from "./composer-types";
-import { useFramePreview } from "./use-frame-preview";
+import type { AppBootstrapData, FilePickKind } from "./electron-api";
 import { PreviewPanel } from "./components/preview-panel";
-import {
-  FileField,
-  NumberField,
-  OptionCategorySection,
-  OptionField,
-  SelectField
-} from "./components/form-fields";
-
-interface VideoSizePreset {
-  id: string;
-  label: string;
-  width: number;
-  height: number;
-}
-
-interface FpsPreset {
-  id: string;
-  label: string;
-  fps: number;
-}
-
-const VIDEO_SIZE_PRESETS: VideoSizePreset[] = [
-  { id: "4k", label: "4K (3840x2160)", width: 3840, height: 2160 },
-  { id: "2k", label: "2K (2560x1440)", width: 2560, height: 1440 },
-  { id: "1080", label: "1080p (1920x1080)", width: 1920, height: 1080 },
-  { id: "720", label: "720p (1280x720)", width: 1280, height: 720 },
-  { id: "1024-square", label: "1024 Square (1024x1024)", width: 1024, height: 1024 }
-];
-
-const FPS_PRESETS: FpsPreset[] = [
-  { id: "15", label: "15 fps", fps: 15 },
-  { id: "20", label: "20 fps", fps: 20 },
-  { id: "30", label: "30 fps", fps: 30 },
-  { id: "60", label: "60 fps", fps: 60 }
-];
-
-const emptyState: ComposerState = {
-  audioPath: "",
-  subtitlePath: "",
-  outputPath: "",
-  scene: null,
-  video: {
-    width: DEFAULT_VIDEO_WIDTH,
-    height: DEFAULT_VIDEO_HEIGHT,
-    fps: DEFAULT_VIDEO_FPS
-  }
-};
+import { useFramePreview } from "./use-frame-preview";
 
 export function App() {
   const [bootstrap, setBootstrap] = useState<AppBootstrapData | null>(null);
-  const [composer, setComposer] = useState<ComposerState>(emptyState);
+  const [composer, setComposer] = useState<ComposerState>(emptyComposerState);
   const [history, setHistory] = useState<RenderHistoryEntry[]>([]);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -154,11 +115,7 @@ export function App() {
     return <div className="app-shell loading">Loading composer...</div>;
   }
 
-  async function handlePickPath(
-    kind: "audio" | "subtitle" | "image" | "output",
-    instanceId?: string,
-    optionId?: string
-  ) {
+  async function handlePickPath(kind: FilePickKind, instanceId?: string, optionId?: string) {
     const suggestedName =
       kind === "output" && composer.audioPath
         ? `${stripExtension(getFileName(composer.audioPath))}.mp4`
@@ -374,92 +331,65 @@ export function App() {
   return (
     <div className="app-shell">
       <main className="workspace">
-        <section className="panel">
-          <div className="panel-header">
-            <div>
-              <p className="eyebrow">Import</p>
-              <h2>Source files</h2>
-            </div>
-            <button className="secondary" onClick={() => handlePickPath("output")}>
-              Choose output
-            </button>
-          </div>
+        <SourceFilesPanel composer={composer} onPickPath={(kind) => void handlePickPath(kind)} />
 
-          <div className="field-grid">
-            <FileField label="Song audio" value={composer.audioPath} buttonLabel="Pick MP3" onPick={() => handlePickPath("audio")} />
-            <FileField label="Lyric subtitles" value={composer.subtitlePath} buttonLabel="Pick SRT" onPick={() => handlePickPath("subtitle")} />
-            <FileField label="Output MP4" value={composer.outputPath} buttonLabel="Save As" onPick={() => handlePickPath("output")} />
-          </div>
-        </section>
+        <VideoSettingsPanel
+          video={composer.video}
+          selectedVideoSizePresetId={selectedVideoSizePresetId}
+          selectedFpsPresetId={selectedFpsPresetId}
+          onVideoSizePresetChange={(value) => {
+            if (value === "custom") {
+              return;
+            }
 
-        <section className="panel">
-          <div className="panel-header">
-            <div>
-              <p className="eyebrow">Video</p>
-              <h2>Video parameters</h2>
-            </div>
-          </div>
+            const preset = VIDEO_SIZE_PRESETS.find((entry) => entry.id === value);
+            if (!preset) {
+              return;
+            }
 
-          <div className="video-param-grid">
-            <SelectField
-              label="Size preset"
-              value={selectedVideoSizePresetId}
-              options={[
-                { value: "custom", label: "Custom" },
-                ...VIDEO_SIZE_PRESETS.map((preset) => ({ value: preset.id, label: preset.label }))
-              ]}
-              onChange={(value) => {
-                if (value === "custom") {
-                  return;
-                }
+            setComposer((current) => ({
+              ...current,
+              video: {
+                ...current.video,
+                width: preset.width,
+                height: preset.height
+              }
+            }));
+          }}
+          onFpsPresetChange={(value) => {
+            if (value === "custom") {
+              return;
+            }
 
-                const preset = VIDEO_SIZE_PRESETS.find((entry) => entry.id === value);
-                if (!preset) {
-                  return;
-                }
+            const preset = FPS_PRESETS.find((entry) => entry.id === value);
+            if (!preset) {
+              return;
+            }
 
-                setComposer((current) => ({
-                  ...current,
-                  video: {
-                    ...current.video,
-                    width: preset.width,
-                    height: preset.height
-                  }
-                }));
-              }}
-            />
-            <SelectField
-              label="FPS preset"
-              value={selectedFpsPresetId}
-              options={[
-                { value: "custom", label: "Custom" },
-                ...FPS_PRESETS.map((preset) => ({ value: preset.id, label: preset.label }))
-              ]}
-              onChange={(value) => {
-                if (value === "custom") {
-                  return;
-                }
-
-                const preset = FPS_PRESETS.find((entry) => entry.id === value);
-                if (!preset) {
-                  return;
-                }
-
-                setComposer((current) => ({
-                  ...current,
-                  video: { ...current.video, fps: preset.fps }
-                }));
-              }}
-            />
-            <NumberField label="Width" value={composer.video.width} min={16} step={1} onChange={(value) => setComposer((current) => ({ ...current, video: { ...current.video, width: value } }))} />
-            <NumberField label="Height" value={composer.video.height} min={16} step={1} onChange={(value) => setComposer((current) => ({ ...current, video: { ...current.video, height: value } }))} />
-            <NumberField label="Frame rate" value={composer.video.fps} min={1} step={1} onChange={(value) => setComposer((current) => ({ ...current, video: { ...current.video, fps: value } }))} />
-          </div>
-
-          <p className="video-param-hint">
-            Default render target is {DEFAULT_VIDEO_WIDTH}x{DEFAULT_VIDEO_HEIGHT} at {DEFAULT_VIDEO_FPS} fps.
-          </p>
-        </section>
+            setComposer((current) => ({
+              ...current,
+              video: { ...current.video, fps: preset.fps }
+            }));
+          }}
+          onWidthChange={(value) =>
+            setComposer((current) => ({
+              ...current,
+              video: { ...current.video, width: value }
+            }))
+          }
+          onHeightChange={(value) =>
+            setComposer((current) => ({
+              ...current,
+              video: { ...current.video, height: value }
+            }))
+          }
+          onFpsChange={(value) =>
+            setComposer((current) => ({
+              ...current,
+              video: { ...current.video, fps: value }
+            }))
+          }
+        />
 
         <PreviewPanel
           video={composer.video}
@@ -469,278 +399,70 @@ export function App() {
           onTimeChange={updatePreviewTime}
         />
 
-        <section className="panel">
-          <div className="panel-header">
-            <div>
-              <p className="eyebrow">Scene Library</p>
-              <h2>Scene stacks</h2>
-            </div>
-            <div className="button-row">
-              <button className="secondary" onClick={handleImportScene}>Import JSON</button>
-              <button className="secondary" onClick={handleExportScene}>Export JSON</button>
-              <button className="secondary" onClick={handleSaveScene}>
-                {selectedScene.source === "user" ? "Save Scene" : "Save as User Scene"}
-              </button>
-              {selectedScene.source === "user" ? (
-                <button className="secondary danger" onClick={handleDeleteScene}>Delete Scene</button>
-              ) : null}
-            </div>
-          </div>
+        <SceneLibraryPanel
+          builtInScenes={builtInScenes}
+          userScenes={userScenes}
+          selectedScene={selectedScene}
+          components={components}
+          componentCatalog={componentCatalog}
+          fonts={bootstrap.fonts}
+          expandedCategories={expandedCategories}
+          componentToAddId={componentToAddId}
+          onComponentToAddIdChange={setComponentToAddId}
+          onSceneChange={handleSceneChange}
+          onSceneNameChange={(name) =>
+            setComposer((current) => ({
+              ...current,
+              scene: current.scene ? { ...current.scene, name } : current.scene
+            }))
+          }
+          onSceneDescriptionChange={(description) =>
+            setComposer((current) => ({
+              ...current,
+              scene: current.scene ? { ...current.scene, description } : current.scene
+            }))
+          }
+          onImportScene={() => void handleImportScene()}
+          onExportScene={() => void handleExportScene()}
+          onSaveScene={() => void handleSaveScene()}
+          onDeleteScene={() => void handleDeleteScene()}
+          onAddComponent={handleAddComponent}
+          onToggleComponentEnabled={(instanceId) =>
+            updateSceneComponent(instanceId, (current) => ({
+              ...current,
+              enabled: !current.enabled
+            }))
+          }
+          onMoveComponent={moveSceneComponent}
+          onDuplicateComponent={duplicateSceneComponent}
+          onRemoveComponent={removeSceneComponent}
+          onComponentOptionChange={(instanceId, optionId, value) =>
+            updateSceneComponent(instanceId, (current) => ({
+              ...current,
+              options: { ...current.options, [optionId]: value }
+            }))
+          }
+          onPickComponentImage={(instanceId, optionId) =>
+            void handlePickPath("image", instanceId, optionId)
+          }
+          onToggleCategory={(instanceId, categoryId) =>
+            setExpandedCategories((current) => ({
+              ...current,
+              [getCategoryStateKey(instanceId, categoryId)]:
+                !(current[getCategoryStateKey(instanceId, categoryId)] ?? true)
+            }))
+          }
+        />
 
-          <div className="scene-library-grid">
-            <label className="field">
-              <span>Scene preset</span>
-              <select value={selectedScene.id} onChange={(event) => handleSceneChange(event.target.value)}>
-                <optgroup label="Built-in">
-                  {builtInScenes.map((scene) => <option key={scene.id} value={scene.id}>{scene.name}</option>)}
-                </optgroup>
-                {userScenes.length > 0 ? (
-                  <optgroup label="User Scenes">
-                    {userScenes.map((scene) => <option key={scene.id} value={scene.id}>{scene.name}</option>)}
-                  </optgroup>
-                ) : null}
-              </select>
-            </label>
-
-            <label className="field">
-              <span>Scene name</span>
-              <input value={selectedScene.name} onChange={(event) => setComposer((current) => ({ ...current, scene: current.scene ? { ...current.scene, name: event.target.value } : current.scene }))} />
-            </label>
-          </div>
-
-          <label className="field">
-            <span>Description</span>
-            <textarea value={selectedScene.description ?? ""} onChange={(event) => setComposer((current) => ({ ...current, scene: current.scene ? { ...current.scene, description: event.target.value } : current.scene }))} />
-          </label>
-
-          <p className="scene-description">
-            {selectedScene.source === "built-in"
-              ? "Built-in template. Editing is local until you save a user-owned copy."
-              : "User scene stored locally and reusable across renders."}
-          </p>
-
-          <div className="component-toolbar">
-            <label className="field">
-              <span>Add component</span>
-              <select value={componentToAddId} onChange={(event) => setComponentToAddId(event.target.value)}>
-                {components.map((component) => <option key={component.id} value={component.id}>{component.name}</option>)}
-              </select>
-            </label>
-            <button className="primary" onClick={handleAddComponent}>Add to stack</button>
-          </div>
-
-          <div className="component-stack">
-            {selectedScene.components.length === 0 ? (
-              <div className="history-empty">No components in this scene.</div>
-            ) : (
-              selectedScene.components.map((instance, index) => {
-                const component = componentCatalog.get(instance.componentId);
-                if (!component) {
-                  return null;
-                }
-
-                const topLevelOptions = component.options.filter(
-                  (option): option is SceneOptionField => !isSceneOptionCategory(option)
-                );
-                const categorizedOptions = component.options.filter(isSceneOptionCategory);
-
-                return (
-                  <section key={instance.id} className="component-card">
-                    <div className="component-card-header">
-                      <div>
-                        <p className="eyebrow">Layer {index + 1}</p>
-                        <h3>{component.name}</h3>
-                        {component.description ? <p className="scene-description">{component.description}</p> : null}
-                      </div>
-                      <div className="button-row">
-                        <button className="secondary" onClick={() => updateSceneComponent(instance.id, (current) => ({ ...current, enabled: !current.enabled }))}>
-                          {instance.enabled ? "Disable" : "Enable"}
-                        </button>
-                        <button className="secondary" onClick={() => moveSceneComponent(instance.id, -1)}>Move Up</button>
-                        <button className="secondary" onClick={() => moveSceneComponent(instance.id, 1)}>Move Down</button>
-                        <button className="secondary" onClick={() => duplicateSceneComponent(instance.id)}>Duplicate</button>
-                        <button className="secondary danger" onClick={() => removeSceneComponent(instance.id)}>Remove</button>
-                      </div>
-                    </div>
-
-                    {topLevelOptions.length > 0 ? (
-                      <div className="option-list top-level-options">
-                        {topLevelOptions.map((field) => (
-                          <OptionField
-                            key={field.id}
-                            field={field}
-                            inputPrefix={instance.id}
-                            value={instance.options[field.id]}
-                            fonts={bootstrap.fonts}
-                            onChange={(value) => updateSceneComponent(instance.id, (current) => ({ ...current, options: { ...current.options, [field.id]: value } }))}
-                            onPickImage={() => handlePickPath("image", instance.id, field.id)}
-                          />
-                        ))}
-                      </div>
-                    ) : null}
-
-                    {categorizedOptions.map((category) => (
-                      <OptionCategorySection
-                        key={category.id}
-                        category={category}
-                        isExpanded={expandedCategories[getCategoryStateKey(instance.id, category.id)] ?? category.defaultExpanded ?? true}
-                        onToggle={() => setExpandedCategories((current) => ({ ...current, [getCategoryStateKey(instance.id, category.id)]: !(current[getCategoryStateKey(instance.id, category.id)] ?? category.defaultExpanded ?? true) }))}
-                      >
-                        {category.options.map((field) => (
-                          <OptionField
-                            key={field.id}
-                            field={field}
-                            inputPrefix={instance.id}
-                            value={instance.options[field.id]}
-                            fonts={bootstrap.fonts}
-                            onChange={(value) => updateSceneComponent(instance.id, (current) => ({ ...current, options: { ...current.options, [field.id]: value } }))}
-                            onPickImage={() => handlePickPath("image", instance.id, field.id)}
-                          />
-                        ))}
-                      </OptionCategorySection>
-                    ))}
-                  </section>
-                );
-              })
-            )}
-          </div>
-        </section>
-
-        <section className="panel">
-          <div className="panel-header">
-            <div>
-              <p className="eyebrow">Render</p>
-              <h2>Job control</h2>
-            </div>
-            <button className="primary" disabled={isSubmitting || hasActiveRender} onClick={handleSubmit}>
-              {isSubmitting || hasActiveRender ? "Rendering..." : "Render MP4"}
-            </button>
-          </div>
-
-          {error ? <p className="error-banner">{error}</p> : null}
-
-          <ul className="history-list">
-            {history.length === 0 ? (
-              <li className="history-empty">No renders yet.</li>
-            ) : (
-              history.map((entry) => {
-                const active = ["queued", "preparing", "rendering", "muxing"].includes(entry.status);
-
-                return (
-                  <li key={entry.id} className="history-item">
-                    <div className="history-meta">
-                      <div>
-                        <strong>{entry.sceneName}</strong>
-                        <p>{getFileName(entry.outputPath)}</p>
-                      </div>
-                      <span className={`status status-${entry.status}`}>{entry.status}</span>
-                    </div>
-                    <p className="history-message">{entry.message}</p>
-                    <div className="progress-track">
-                      <div className="progress-value" style={{ width: `${Math.max(0, Math.min(100, entry.progress))}%` }} />
-                    </div>
-                    {entry.status === "rendering" ? (
-                      <div className="history-stats">
-                        <span>{entry.renderFps ? `${entry.renderFps.toFixed(2)} fps` : "Measuring speed..."}</span>
-                        <span>{entry.etaMs !== undefined ? `ETA ${formatEta(entry.etaMs)}` : "ETA calculating..."}</span>
-                      </div>
-                    ) : null}
-                    <div className="history-footer">
-                      <span>{new Date(entry.createdAt).toLocaleString()}</span>
-                      {active ? <button className="secondary danger" onClick={() => window.lyricVideoApp.cancelRender(entry.id)}>Cancel</button> : null}
-                    </div>
-                    {entry.error ? <p className="history-error">{entry.error}</p> : null}
-                    {entry.logs && entry.logs.length > 0 ? (
-                      <details className="history-logs">
-                        <summary>Logs ({entry.logs.length})</summary>
-                        <div className="history-log-list">
-                          {entry.logs.map((log, index) => (
-                            <div key={`${log.timestamp}-${index}`} className={`history-log history-log-${log.level}`}>
-                              <span>{new Date(log.timestamp).toLocaleTimeString()}</span>
-                              <strong>{log.level}</strong>
-                              <p>{log.message}</p>
-                            </div>
-                          ))}
-                        </div>
-                      </details>
-                    ) : null}
-                  </li>
-                );
-              })
-            )}
-          </ul>
-        </section>
+        <RenderHistoryPanel
+          error={error}
+          history={history}
+          hasActiveRender={hasActiveRender}
+          isSubmitting={isSubmitting}
+          onSubmit={() => void handleSubmit()}
+          onCancelRender={(jobId) => void window.lyricVideoApp.cancelRender(jobId)}
+        />
       </main>
     </div>
   );
-}
-
-function upsertHistory(history: RenderHistoryEntry[], event: RenderProgressEvent | RenderHistoryEntry) {
-  const currentEntry =
-    "sceneId" in event ? history.find((entry) => entry.id === event.id) : history.find((entry) => entry.id === event.jobId);
-  const nextEntry: RenderHistoryEntry =
-    "sceneId" in event
-      ? event
-      : {
-          id: event.jobId,
-          sceneId: currentEntry?.sceneId ?? "unknown-scene",
-          sceneName: currentEntry?.sceneName ?? "Unknown Scene",
-          outputPath: event.outputPath ?? currentEntry?.outputPath ?? "",
-          createdAt: currentEntry?.createdAt ?? new Date().toISOString(),
-          status: Number.isFinite(event.progress) ? event.status : currentEntry?.status ?? event.status,
-          progress: Number.isFinite(event.progress) ? event.progress : currentEntry?.progress ?? 0,
-          message: event.logEntry && !Number.isFinite(event.progress) ? currentEntry?.message ?? event.message : event.message,
-          etaMs: Number.isFinite(event.progress) ? event.etaMs : currentEntry?.etaMs,
-          renderFps: Number.isFinite(event.progress) ? event.renderFps : currentEntry?.renderFps,
-          error: event.error ?? currentEntry?.error,
-          logs: event.logEntry ? [...(currentEntry?.logs ?? []), event.logEntry] : currentEntry?.logs
-        };
-
-  const withoutEntry = history.filter((entry) => entry.id !== nextEntry.id);
-  return [nextEntry, ...withoutEntry].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
-}
-
-function getFileName(path: string) {
-  return path.split(/[\\/]/).pop() ?? path;
-}
-
-function stripExtension(fileName: string) {
-  return fileName.replace(/\.[^/.]+$/, "");
-}
-
-function formatEta(etaMs: number) {
-  const totalSeconds = Math.max(0, Math.round(etaMs / 1000));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
-}
-
-function getCategoryStateKey(instanceId: string, categoryId: string) {
-  return `${instanceId}:${categoryId}`;
-}
-
-function upsertScene(scenes: SerializedSceneDefinition[], nextScene: SerializedSceneDefinition) {
-  const withoutScene = scenes.filter((scene) => scene.id !== nextScene.id);
-  return [...withoutScene, nextScene].sort((left, right) => left.name.localeCompare(right.name));
-}
-
-function cloneScene(scene: SerializedSceneDefinition): SerializedSceneDefinition {
-  return structuredClone(scene);
-}
-
-function cloneComponent(component: SceneComponentInstance): SceneComponentInstance {
-  return structuredClone(component);
-}
-
-function createSceneComponentInstance(component: SerializedSceneComponentDefinition): SceneComponentInstance {
-  return {
-    id: createInstanceId(component.id),
-    componentId: component.id,
-    enabled: true,
-    options: structuredClone(component.defaultOptions)
-  };
-}
-
-function createInstanceId(componentId: string) {
-  return `${componentId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
