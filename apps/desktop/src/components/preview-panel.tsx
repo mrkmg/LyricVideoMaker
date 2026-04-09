@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import React, { type CSSProperties } from "react";
 import type { LyricCue, VideoSettings } from "@lyric-video-maker/core";
 import { durationMsToFrameCount } from "@lyric-video-maker/core";
 import type { FramePreviewState } from "../use-frame-preview";

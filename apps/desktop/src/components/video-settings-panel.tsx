@@ -1,3 +1,4 @@
+import React from "react";
 import {
   DEFAULT_VIDEO_FPS,
   DEFAULT_VIDEO_HEIGHT,

@@ -1,3 +1,4 @@
+import React from "react";
 import type { RenderHistoryEntry } from "@lyric-video-maker/core";
 import { formatEta, getFileName } from "../app-utils";
 

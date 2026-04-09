@@ -1,3 +1,4 @@
+import React from "react";
 import type { ComposerState } from "../composer-types";
 import type { FilePickKind } from "../electron-api";
 import { FileField } from "./form-fields";

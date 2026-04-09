@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import type {
   RenderHistoryEntry,
   SceneComponentInstance
@@ -14,34 +14,39 @@ import {
   getCategoryStateKey,
   getFileName,
   stripExtension,
-  upsertHistory,
   upsertScene,
   VIDEO_SIZE_PRESETS
 } from "./app-utils";
-import { RenderHistoryPanel } from "./components/render-history-panel";
-import { SceneLibraryPanel } from "./components/scene-library-panel";
-import { SourceFilesPanel } from "./components/source-files-panel";
-import { VideoSettingsPanel } from "./components/video-settings-panel";
+import { ComponentDetailsEditor } from "./components/component-details-editor";
+import { GeneralDetailsEditor } from "./components/general-details-editor";
+import { PreviewPanel } from "./components/preview-panel";
+import { RenderProgressDialog } from "./components/render-progress-dialog";
+import { SceneDetailsEditor } from "./components/scene-details-editor";
+import { WorkspaceNavPanel } from "./components/workspace-nav-panel";
 import type { ComposerState } from "./composer-types";
 import type { AppBootstrapData, FilePickKind } from "./electron-api";
-import { PreviewPanel } from "./components/preview-panel";
 import { useFramePreview } from "./use-frame-preview";
+import type { WorkspaceSelection } from "./workspace-types";
+import { isComponentSelection } from "./workspace-types";
+
+const ACTIVE_RENDER_STATUSES = new Set(["queued", "preparing", "rendering", "muxing"]);
 
 export function App() {
   const [bootstrap, setBootstrap] = useState<AppBootstrapData | null>(null);
   const [composer, setComposer] = useState<ComposerState>(emptyComposerState);
-  const [history, setHistory] = useState<RenderHistoryEntry[]>([]);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
   const [componentToAddId, setComponentToAddId] = useState("");
+  const [selection, setSelection] = useState<WorkspaceSelection>({ type: "general" });
+  const [renderDialogEntry, setRenderDialogEntry] = useState<RenderHistoryEntry | null>(null);
+  const [isRenderDialogOpen, setIsRenderDialogOpen] = useState(false);
 
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
 
     void window.lyricVideoApp.getBootstrapData().then((data) => {
       setBootstrap(data);
-      setHistory(data.history);
 
       if (data.scenes[0]) {
         setComposer((current) => ({ ...current, scene: cloneScene(data.scenes[0]) }));
@@ -52,7 +57,8 @@ export function App() {
     });
 
     unsubscribe = window.lyricVideoApp.onRenderProgress((event) => {
-      setHistory((current) => upsertHistory(current, event));
+      setRenderDialogEntry((current) => mergeRenderEntry(current, event));
+      setIsRenderDialogOpen(true);
       setIsSubmitting(false);
     });
 
@@ -68,10 +74,10 @@ export function App() {
   );
   const builtInScenes = useMemo(() => scenes.filter((scene) => scene.source === "built-in"), [scenes]);
   const userScenes = useMemo(() => scenes.filter((scene) => scene.source === "user"), [scenes]);
-  const hasActiveRender = history.some((entry) =>
-    ["queued", "preparing", "rendering", "muxing"].includes(entry.status)
-  );
-  const previewPaused = hasActiveRender || isSubmitting;
+  const hasActiveRender =
+    isSubmitting ||
+    (renderDialogEntry ? ACTIVE_RENDER_STATUSES.has(renderDialogEntry.status) : false);
+  const previewPaused = hasActiveRender;
   const { enabled: previewEnabled, preview, updatePreviewTime } = useFramePreview({
     composer,
     paused: previewPaused
@@ -82,6 +88,16 @@ export function App() {
     )?.id ?? "custom";
   const selectedFpsPresetId =
     FPS_PRESETS.find((preset) => preset.fps === composer.video.fps)?.id ?? "custom";
+  const selectedComponent =
+    selectedScene && isComponentSelection(selection)
+      ? selectedScene.components.find((component) => component.id === selection.instanceId) ?? null
+      : null;
+  const selectedComponentDefinition = selectedComponent
+    ? componentCatalog.get(selectedComponent.componentId) ?? null
+    : null;
+  const selectedComponentIndex = selectedComponent
+    ? selectedScene?.components.findIndex((component) => component.id === selectedComponent.id) ?? -1
+    : -1;
 
   useEffect(() => {
     if (!selectedScene) {
@@ -110,6 +126,20 @@ export function App() {
       return next;
     });
   }, [componentCatalog, selectedScene]);
+
+  useEffect(() => {
+    if (!selectedScene || !isComponentSelection(selection)) {
+      return;
+    }
+
+    const stillExists = selectedScene.components.some(
+      (component) => component.id === selection.instanceId
+    );
+
+    if (!stillExists) {
+      setSelection({ type: "scene" });
+    }
+  }, [selection, selectedScene]);
 
   if (!bootstrap || !selectedScene) {
     return <div className="app-shell loading">Loading composer...</div>;
@@ -161,6 +191,7 @@ export function App() {
 
     setError("");
     setIsSubmitting(true);
+    setIsRenderDialogOpen(true);
     await window.lyricVideoApp.disposePreview();
 
     try {
@@ -171,10 +202,12 @@ export function App() {
         scene: composer.scene,
         video: composer.video
       });
-      setHistory((current) => upsertHistory(current, entry));
+      setRenderDialogEntry(entry);
+      setIsSubmitting(false);
     } catch (submissionError) {
       setError(submissionError instanceof Error ? submissionError.message : String(submissionError));
       setIsSubmitting(false);
+      setIsRenderDialogOpen(false);
     }
   }
 
@@ -185,6 +218,7 @@ export function App() {
     }
 
     setComposer((current) => ({ ...current, scene: cloneScene(nextScene) }));
+    setSelection({ type: "scene" });
   }
 
   async function handleSaveScene() {
@@ -211,6 +245,7 @@ export function App() {
       ...current,
       scene: nextScenes[0] ? cloneScene(nextScenes[0]) : null
     }));
+    setSelection({ type: "scene" });
   }
 
   async function handleImportScene() {
@@ -223,6 +258,7 @@ export function App() {
       current ? { ...current, scenes: upsertScene(current.scenes, imported) } : current
     );
     setComposer((current) => ({ ...current, scene: cloneScene(imported) }));
+    setSelection({ type: "scene" });
   }
 
   async function handleExportScene() {
@@ -241,15 +277,17 @@ export function App() {
       return;
     }
 
+    const nextInstance = createSceneComponentInstance(component);
     setComposer((current) => ({
       ...current,
       scene: current.scene
         ? {
             ...current.scene,
-            components: [...current.scene.components, createSceneComponentInstance(component)]
+            components: [...current.scene.components, nextInstance]
           }
         : current.scene
     }));
+    setSelection({ type: "component", instanceId: nextInstance.id });
   }
 
   function updateSceneComponent(
@@ -302,18 +340,17 @@ export function App() {
       return;
     }
 
+    const duplicated = { ...cloneComponent(component), id: createInstanceId(component.componentId) };
     setComposer((current) => ({
       ...current,
       scene: current.scene
         ? {
             ...current.scene,
-            components: [
-              ...current.scene.components,
-              { ...cloneComponent(component), id: createInstanceId(component.componentId) }
-            ]
+            components: [...current.scene.components, duplicated]
           }
         : current.scene
     }));
+    setSelection({ type: "component", instanceId: duplicated.id });
   }
 
   function removeSceneComponent(instanceId: string) {
@@ -326,17 +363,25 @@ export function App() {
           }
         : current.scene
     }));
+
+    setSelection((current) =>
+      current.type === "component" && current.instanceId === instanceId
+        ? { type: "scene" }
+        : current
+    );
   }
 
-  return (
-    <div className="app-shell">
-      <main className="workspace">
-        <SourceFilesPanel composer={composer} onPickPath={(kind) => void handlePickPath(kind)} />
-
-        <VideoSettingsPanel
-          video={composer.video}
+  function renderInspector() {
+    if (selection.type === "general") {
+      return (
+        <GeneralDetailsEditor
+          composer={composer}
           selectedVideoSizePresetId={selectedVideoSizePresetId}
           selectedFpsPresetId={selectedFpsPresetId}
+          error={error}
+          isSubmitting={isSubmitting}
+          hasActiveRender={hasActiveRender}
+          onPickPath={(kind) => void handlePickPath(kind)}
           onVideoSizePresetChange={(value) => {
             if (value === "custom") {
               return;
@@ -389,26 +434,19 @@ export function App() {
               video: { ...current.video, fps: value }
             }))
           }
+          onSubmit={() => void handleSubmit()}
         />
+      );
+    }
 
-        <PreviewPanel
-          video={composer.video}
-          preview={preview}
-          enabled={previewEnabled}
-          paused={previewPaused}
-          onTimeChange={updatePreviewTime}
-        />
-
-        <SceneLibraryPanel
+    if (selection.type === "scene") {
+      return (
+        <SceneDetailsEditor
           builtInScenes={builtInScenes}
           userScenes={userScenes}
-          selectedScene={selectedScene}
+          selectedScene={selectedScene!}
           components={components}
           componentCatalog={componentCatalog}
-          fonts={bootstrap.fonts}
-          expandedCategories={expandedCategories}
-          componentToAddId={componentToAddId}
-          onComponentToAddIdChange={setComponentToAddId}
           onSceneChange={handleSceneChange}
           onSceneNameChange={(name) =>
             setComposer((current) => ({
@@ -426,43 +464,118 @@ export function App() {
           onExportScene={() => void handleExportScene()}
           onSaveScene={() => void handleSaveScene()}
           onDeleteScene={() => void handleDeleteScene()}
-          onAddComponent={handleAddComponent}
-          onToggleComponentEnabled={(instanceId) =>
-            updateSceneComponent(instanceId, (current) => ({
+        />
+      );
+    }
+
+    if (selectedComponent && selectedComponentDefinition && selectedComponentIndex >= 0) {
+      return (
+        <ComponentDetailsEditor
+          component={selectedComponentDefinition}
+          instance={selectedComponent}
+          index={selectedComponentIndex}
+          totalComponents={selectedScene!.components.length}
+          fonts={bootstrap!.fonts}
+          expandedCategories={expandedCategories}
+          onToggleEnabled={() =>
+            updateSceneComponent(selectedComponent.id, (current) => ({
               ...current,
               enabled: !current.enabled
             }))
           }
-          onMoveComponent={moveSceneComponent}
-          onDuplicateComponent={duplicateSceneComponent}
-          onRemoveComponent={removeSceneComponent}
-          onComponentOptionChange={(instanceId, optionId, value) =>
-            updateSceneComponent(instanceId, (current) => ({
+          onMove={(direction) => moveSceneComponent(selectedComponent.id, direction)}
+          onDuplicate={() => duplicateSceneComponent(selectedComponent.id)}
+          onRemove={() => removeSceneComponent(selectedComponent.id)}
+          onOptionChange={(optionId, value) =>
+            updateSceneComponent(selectedComponent.id, (current) => ({
               ...current,
               options: { ...current.options, [optionId]: value }
             }))
           }
-          onPickComponentImage={(instanceId, optionId) =>
-            void handlePickPath("image", instanceId, optionId)
-          }
-          onToggleCategory={(instanceId, categoryId) =>
+          onPickImage={(optionId) => void handlePickPath("image", selectedComponent.id, optionId)}
+          onToggleCategory={(categoryId) =>
             setExpandedCategories((current) => ({
               ...current,
-              [getCategoryStateKey(instanceId, categoryId)]:
-                !(current[getCategoryStateKey(instanceId, categoryId)] ?? true)
+              [getCategoryStateKey(selectedComponent.id, categoryId)]:
+                !(current[getCategoryStateKey(selectedComponent.id, categoryId)] ?? true)
             }))
           }
         />
+      );
+    }
 
-        <RenderHistoryPanel
-          error={error}
-          history={history}
-          hasActiveRender={hasActiveRender}
-          isSubmitting={isSubmitting}
-          onSubmit={() => void handleSubmit()}
-          onCancelRender={(jobId) => void window.lyricVideoApp.cancelRender(jobId)}
-        />
+    return null;
+  }
+
+  return (
+    <div className="app-shell">
+      <main className="workspace">
+        <div className="workspace-top">
+          <WorkspaceNavPanel
+            selectedScene={selectedScene}
+            selection={selection}
+            componentCatalog={componentCatalog}
+            componentToAddId={componentToAddId}
+            onSelectGeneral={() => setSelection({ type: "general" })}
+            onSelectScene={() => setSelection({ type: "scene" })}
+            onSelectComponent={(instanceId) => setSelection({ type: "component", instanceId })}
+            onComponentToAddIdChange={setComponentToAddId}
+            onAddComponent={handleAddComponent}
+            onMoveComponent={moveSceneComponent}
+            onDuplicateComponent={duplicateSceneComponent}
+            onRemoveComponent={removeSceneComponent}
+          />
+
+          <PreviewPanel
+            video={composer.video}
+            preview={preview}
+            enabled={previewEnabled}
+            paused={previewPaused}
+            onTimeChange={updatePreviewTime}
+          />
+        </div>
+
+        <div className="workspace-bottom">{renderInspector()}</div>
       </main>
+
+      <RenderProgressDialog
+        entry={renderDialogEntry}
+        isOpen={isRenderDialogOpen}
+        onCancelRender={(jobId) => void window.lyricVideoApp.cancelRender(jobId)}
+        onDismiss={() => {
+          setIsRenderDialogOpen(false);
+          setRenderDialogEntry(null);
+        }}
+      />
     </div>
   );
+}
+
+function mergeRenderEntry(
+  current: RenderHistoryEntry | null,
+  event: {
+    jobId: string;
+    status: RenderHistoryEntry["status"];
+    progress: number;
+    message: string;
+    etaMs?: number;
+    renderFps?: number;
+    outputPath?: string;
+    error?: string;
+  }
+) {
+  if (!current || current.id !== event.jobId) {
+    return current;
+  }
+
+  return {
+    ...current,
+    outputPath: event.outputPath ?? current.outputPath,
+    status: Number.isFinite(event.progress) ? event.status : current.status,
+    progress: Number.isFinite(event.progress) ? event.progress : current.progress,
+    message: event.message,
+    etaMs: Number.isFinite(event.progress) ? event.etaMs : current.etaMs,
+    renderFps: Number.isFinite(event.progress) ? event.renderFps : current.renderFps,
+    error: event.error ?? current.error
+  } satisfies RenderHistoryEntry;
 }
