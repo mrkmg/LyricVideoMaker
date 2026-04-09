@@ -7,6 +7,11 @@ type LyricVerticalPosition = "top" | "middle" | "bottom";
 
 export interface SingleImageLyricsOptions {
   backgroundImage: string;
+  backgroundEnabled: boolean;
+  backgroundTopColor: string;
+  backgroundTopOpacity: number;
+  backgroundBottomColor: string;
+  backgroundBottomOpacity: number;
   lyricSize: number;
   lyricFont: string;
   lyricColor: string;
@@ -32,6 +37,35 @@ export const singleImageLyricsScene: SceneDefinition<SingleImageLyricsOptions> =
   staticWhenMarkupUnchanged: false,
   options: [
     { type: "image", id: "backgroundImage", label: "Background Image", required: true },
+    {
+      type: "category",
+      id: "background",
+      label: "Background",
+      defaultExpanded: false,
+      options: [
+        { type: "boolean", id: "backgroundEnabled", label: "Enable Background", defaultValue: false },
+        { type: "color", id: "backgroundTopColor", label: "Color Top", defaultValue: "#09090f" },
+        {
+          type: "number",
+          id: "backgroundTopOpacity",
+          label: "Color Top Opacity",
+          defaultValue: 60,
+          min: 0,
+          max: 100,
+          step: 1
+        },
+        { type: "color", id: "backgroundBottomColor", label: "Color Bottom", defaultValue: "#09090f" },
+        {
+          type: "number",
+          id: "backgroundBottomOpacity",
+          label: "Color Bottom Opacity",
+          defaultValue: 60,
+          min: 0,
+          max: 100,
+          step: 1
+        }
+      ]
+    },
     {
       type: "category",
       id: "lyrics",
@@ -154,6 +188,11 @@ export const singleImageLyricsScene: SceneDefinition<SingleImageLyricsOptions> =
   ],
   defaultOptions: {
     backgroundImage: "",
+    backgroundEnabled: false,
+    backgroundTopColor: "#09090f",
+    backgroundTopOpacity: 60,
+    backgroundBottomColor: "#09090f",
+    backgroundBottomOpacity: 60,
     lyricSize: 72,
     lyricFont: SUPPORTED_FONT_FAMILIES[0],
     lyricColor: "#FFFFFF",
@@ -187,6 +226,13 @@ export const singleImageLyricsScene: SceneDefinition<SingleImageLyricsOptions> =
       options.borderEnabled && options.borderThickness > 0
         ? `${options.borderThickness}px ${options.borderColor}`
         : undefined;
+    const backgroundOverlay =
+      options.backgroundEnabled
+        ? `linear-gradient(180deg, ${withAlpha(options.backgroundTopColor, options.backgroundTopOpacity / 100)} 0%, ${withAlpha(
+            options.backgroundBottomColor,
+            options.backgroundBottomOpacity / 100
+          )} 100%)`
+        : null;
 
     return (
       <div
@@ -211,6 +257,15 @@ export const singleImageLyricsScene: SceneDefinition<SingleImageLyricsOptions> =
               height: "100%",
               objectFit: "cover",
               transform: "scale(1.03)"
+            }}
+          />
+        ) : null}
+        {backgroundOverlay ? (
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              background: backgroundOverlay
             }}
           />
         ) : null}
