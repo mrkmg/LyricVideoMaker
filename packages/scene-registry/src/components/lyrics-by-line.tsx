@@ -14,6 +14,10 @@ const LYRIC_FONT_WEIGHT = 700;
 const LYRIC_LINE_HEIGHT = 1.15;
 const LYRIC_LETTER_SPACING_EM = -0.03;
 const LYRIC_VERTICAL_INSET = 110;
+const LYRIC_LAYOUT_CACHE_LIMIT = 200;
+const lyricScaledLayoutCache = new Map<string, ScaledLyricLayout>();
+const lyricBlockStyleCache = new Map<string, ReturnType<typeof createLyricBlockStyles>>();
+const lyricMeasurementCache = new Map<string, number>();
 
 interface LyricScale {
   horizontal: number;
@@ -353,7 +357,34 @@ export const lyricsByLineComponent: SceneComponentDefinition<LyricsByLineOptions
   }
 };
 
+export const lyricsByLineTestUtils = {
+  clearCaches() {
+    lyricScaledLayoutCache.clear();
+    lyricBlockStyleCache.clear();
+    lyricMeasurementCache.clear();
+  },
+  getMeasurementCacheSize() {
+    return lyricMeasurementCache.size;
+  }
+};
+
 function getLyricBlockStyles(
+  position: LyricVerticalPosition,
+  horizontalPadding: number,
+  verticalInset: number
+) {
+  const cacheKey = `${position}:${horizontalPadding}:${verticalInset}`;
+  const cached = lyricBlockStyleCache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  const nextValue = createLyricBlockStyles(position, horizontalPadding, verticalInset);
+  setCachedValue(lyricBlockStyleCache, cacheKey, nextValue);
+  return nextValue;
+}
+
+function createLyricBlockStyles(
   position: LyricVerticalPosition,
   horizontalPadding: number,
   verticalInset: number
@@ -385,14 +416,28 @@ function getScaledLyricLayout(
   video: { width: number; height: number },
   options: Pick<LyricsByLineOptions, "lyricSize" | "horizontalPadding" | "borderThickness">
 ): ScaledLyricLayout {
+  const cacheKey = JSON.stringify({
+    width: video.width,
+    height: video.height,
+    lyricSize: options.lyricSize,
+    horizontalPadding: options.horizontalPadding,
+    borderThickness: options.borderThickness
+  });
+  const cached = lyricScaledLayoutCache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
   const scale = getLyricScale(video);
 
-  return {
+  const nextValue = {
     lyricSize: scaleMeasurement(options.lyricSize, scale.uniform),
     horizontalPadding: scaleMeasurement(options.horizontalPadding, scale.horizontal),
     verticalInset: scaleMeasurement(LYRIC_VERTICAL_INSET, scale.vertical),
     borderThickness: scaleMeasurement(options.borderThickness, scale.uniform)
   };
+  setCachedValue(lyricScaledLayoutCache, cacheKey, nextValue);
+  return nextValue;
 }
 
 function getLyricScale(video: { width: number; height: number }): LyricScale {
@@ -523,6 +568,18 @@ function createTextShadow(fontSize: number, color: string, intensity: number) {
 }
 
 function measureSingleLineWidth(text: string, fontFamily: string, fontSize: number) {
+  const cacheKey = `${fontFamily}:${fontSize}:${text}`;
+  const cached = lyricMeasurementCache.get(cacheKey);
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const measuredWidth = measureSingleLineWidthUncached(text, fontFamily, fontSize);
+  setCachedValue(lyricMeasurementCache, cacheKey, measuredWidth);
+  return measuredWidth;
+}
+
+function measureSingleLineWidthUncached(text: string, fontFamily: string, fontSize: number) {
   if (!canUsePretextMeasurement()) {
     return estimateSingleLineWidth(text, fontSize);
   }
@@ -572,6 +629,18 @@ function getLyricPaintPadding(
       : 0;
   const strokePadding = options.borderEnabled ? Math.ceil(options.borderThickness) : 0;
   return Math.max(2, shadowPadding + strokePadding);
+}
+
+function setCachedValue<T>(cache: Map<string, T>, key: string, value: T) {
+  cache.set(key, value);
+  if (cache.size <= LYRIC_LAYOUT_CACHE_LIMIT) {
+    return;
+  }
+
+  const firstKey = cache.keys().next().value;
+  if (firstKey) {
+    cache.delete(firstKey);
+  }
 }
 
 function withAlpha(hexColor: string, alpha: number) {

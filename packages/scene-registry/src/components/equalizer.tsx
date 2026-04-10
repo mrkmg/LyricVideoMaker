@@ -286,6 +286,28 @@ export const equalizerComponent: SceneComponentDefinition<EqualizerOptions> = {
 
     return options;
   },
+  getPrepareCacheKey({ options, video, audioPath }) {
+    return JSON.stringify({
+      audioPath,
+      video: {
+        fps: video.fps,
+        durationMs: video.durationMs,
+        durationInFrames: video.durationInFrames
+      },
+      spectrum: {
+        barCount: options.barCount,
+        minFrequency: options.minFrequency,
+        maxFrequency: options.maxFrequency,
+        analysisFps: options.analysisFps,
+        sensitivity: options.sensitivity,
+        smoothing: options.smoothing,
+        attackMs: options.attackMs,
+        releaseMs: options.releaseMs,
+        silenceFloor: options.silenceFloor,
+        bandDistribution: options.bandDistribution
+      }
+    });
+  },
   browserRuntime: {
     runtimeId: "equalizer",
     getInitialState({ options, prepared }) {
@@ -320,18 +342,20 @@ export const equalizerComponent: SceneComponentDefinition<EqualizerOptions> = {
   Component: ({ frame, options, prepared }) => {
     const preparedData = prepared as unknown as PreparedEqualizerData;
     const frameValues = buildRenderableBars(preparedData.frames?.[frame] ?? [], options);
-    const layout = getEqualizerLayout(options);
-    const barPlan = buildBarRenderPlan(frameValues, options);
+    const staticValues = getEqualizerStaticValues(options, frameValues.length);
+    const barPlan = buildBarRenderPlan(frameValues, options.layoutMode);
 
     return (
-      <div style={layout.wrapperStyle}>
-        {options.backgroundPlateEnabled ? <div data-equalizer-plate="" style={layout.plateStyle} /> : null}
-        <div data-equalizer-track="" style={layout.trackStyle}>
+      <div style={staticValues.layout.wrapperStyle}>
+        {options.backgroundPlateEnabled ? (
+          <div data-equalizer-plate="" style={staticValues.layout.plateStyle} />
+        ) : null}
+        <div data-equalizer-track="" style={staticValues.layout.trackStyle}>
           {barPlan.map((entry, index) =>
             entry.type === "gap" ? (
               <div
                 key={`gap-${index}`}
-                style={layout.isHorizontal
+                style={staticValues.layout.isHorizontal
                   ? { flex: `0 0 ${Math.max(12, options.barGap * 4)}px` }
                   : { flex: `0 0 ${Math.max(12, options.barGap * 4)}px` }}
               />
@@ -339,9 +363,10 @@ export const equalizerComponent: SceneComponentDefinition<EqualizerOptions> = {
               <EqualizerBar
                 key={`bar-${index}`}
                 value={entry.value}
-                color={getBarColor(entry.colorIndex, frameValues.length, options)}
+                color={staticValues.colorPlan[entry.colorIndex] ?? options.primaryColor}
                 options={options}
-                isHorizontal={layout.isHorizontal}
+                isHorizontal={staticValues.layout.isHorizontal}
+                staticStyle={staticValues.barStyle}
               />
             )
           )}
@@ -355,31 +380,16 @@ function EqualizerBar({
   value,
   color,
   options,
-  isHorizontal
+  isHorizontal,
+  staticStyle
 }: {
   value: number;
   color: string;
   options: EqualizerOptions;
   isHorizontal: boolean;
+  staticStyle: EqualizerBarStaticStyle;
 }) {
   const amplitude = getBarAmplitude(value, options);
-  const shadowParts: string[] = [];
-
-  if (options.shadowEnabled && options.shadowStrength > 0) {
-    shadowParts.push(
-      isHorizontal
-        ? `0 ${Math.max(2, options.shadowStrength / 8)}px ${Math.max(4, options.shadowStrength / 2)}px ${withAlpha(options.shadowColor, 0.45)}`
-        : `${Math.max(2, options.shadowStrength / 8)}px 0 ${Math.max(4, options.shadowStrength / 2)}px ${withAlpha(options.shadowColor, 0.45)}`
-    );
-  }
-  if (options.glowEnabled && options.glowStrength > 0) {
-    shadowParts.push(
-      `0 0 ${Math.max(6, options.glowStrength / 1.5)}px ${withAlpha(options.glowColor, 0.75)}`
-    );
-  }
-
-  const borderRadius = options.capStyle === "rounded" ? `${options.cornerRadius}px` : "0";
-  const opacity = clamp01(options.opacity / 100);
 
   if (options.layoutMode === "mirrored") {
     return isHorizontal ? (
@@ -399,9 +409,9 @@ function EqualizerBar({
             bottom: "50%",
             height: `${amplitude * 50}%`,
             background: color,
-            borderRadius,
-            opacity,
-            boxShadow: shadowParts.join(", ") || "none"
+            borderRadius: staticStyle.borderRadius,
+            opacity: staticStyle.opacity,
+            boxShadow: staticStyle.boxShadow
           }}
         />
         <div
@@ -412,9 +422,9 @@ function EqualizerBar({
             top: "50%",
             height: `${amplitude * 50}%`,
             background: color,
-            borderRadius,
-            opacity,
-            boxShadow: shadowParts.join(", ") || "none"
+            borderRadius: staticStyle.borderRadius,
+            opacity: staticStyle.opacity,
+            boxShadow: staticStyle.boxShadow
           }}
         />
       </div>
@@ -435,9 +445,9 @@ function EqualizerBar({
             right: "50%",
             width: `${amplitude * 50}%`,
             background: color,
-            borderRadius,
-            opacity,
-            boxShadow: shadowParts.join(", ") || "none"
+            borderRadius: staticStyle.borderRadius,
+            opacity: staticStyle.opacity,
+            boxShadow: staticStyle.boxShadow
           }}
         />
         <div
@@ -448,9 +458,9 @@ function EqualizerBar({
             left: "50%",
             width: `${amplitude * 50}%`,
             background: color,
-            borderRadius,
-            opacity,
-            boxShadow: shadowParts.join(", ") || "none"
+            borderRadius: staticStyle.borderRadius,
+            opacity: staticStyle.opacity,
+            boxShadow: staticStyle.boxShadow
           }}
         />
       </div>
@@ -471,9 +481,9 @@ function EqualizerBar({
           isHorizontal,
           amplitude,
           color,
-          opacity,
-          borderRadius,
-          boxShadow: shadowParts.join(", ") || "none",
+          opacity: staticStyle.opacity,
+          borderRadius: staticStyle.borderRadius,
+          boxShadow: staticStyle.boxShadow,
           growthDirection: options.growthDirection
         })}
       />
@@ -483,9 +493,12 @@ function EqualizerBar({
 
 type BarPlanEntry = { type: "bar"; value: number; colorIndex: number } | { type: "gap" };
 
-function buildBarRenderPlan(values: number[], options: EqualizerOptions): BarPlanEntry[] {
-  const bars = buildRenderableBars(values, options);
-  if (options.layoutMode !== "split" || bars.length < 2) {
+function buildBarRenderPlan(
+  values: number[],
+  layoutMode: EqualizerLayoutMode
+): BarPlanEntry[] {
+  const bars = values;
+  if (layoutMode !== "split" || bars.length < 2) {
     return bars.map((value, index) => ({ type: "bar", value, colorIndex: index }));
   }
 
@@ -515,34 +528,93 @@ function createEqualizerBrowserInitialState(
   options: EqualizerOptions,
   initialValues: number[]
 ) {
-  const layout = getEqualizerLayout(options);
   const frameValues = buildRenderableBarAmplitudes(initialValues, options);
-  const barPlan = buildBarRenderPlan(frameValues, options);
-  const shadowParts = buildEqualizerShadowParts(options, layout.isHorizontal);
-  const borderRadius = options.capStyle === "rounded" ? `${options.cornerRadius}px` : "0";
-  const opacity = clamp01(options.opacity / 100);
+  const staticValues = getEqualizerStaticValues(options, frameValues.length);
+  const barPlan = buildBarRenderPlan(frameValues, options.layoutMode);
 
   return {
-    wrapperStyle: layout.wrapperStyle,
-    trackStyle: layout.trackStyle,
-    plateStyle: options.backgroundPlateEnabled ? layout.plateStyle : null,
-    isHorizontal: layout.isHorizontal,
+    wrapperStyle: staticValues.layout.wrapperStyle,
+    trackStyle: staticValues.layout.trackStyle,
+    plateStyle: options.backgroundPlateEnabled ? staticValues.layout.plateStyle : null,
+    isHorizontal: staticValues.layout.isHorizontal,
     layoutMode: options.layoutMode,
     growthDirection: options.growthDirection,
-    borderRadius,
-    opacity,
-    boxShadow: shadowParts.join(", ") || "none",
+    borderRadius: staticValues.barStyle.borderRadius,
+    opacity: staticValues.barStyle.opacity,
+    boxShadow: staticValues.barStyle.boxShadow,
     gapSize: Math.max(12, options.barGap * 4),
     entries: barPlan.map((entry, index) =>
       entry.type === "gap"
         ? { type: "gap" as const }
         : {
             type: "bar" as const,
-            color: getBarColor(entry.colorIndex, frameValues.length, options),
+            color: staticValues.colorPlan[entry.colorIndex] ?? options.primaryColor,
             value: entry.value
           }
     )
   };
+}
+
+interface EqualizerBarStaticStyle {
+  borderRadius: string;
+  boxShadow: string;
+  opacity: number;
+}
+
+interface EqualizerStaticValues {
+  layout: ReturnType<typeof getEqualizerLayout>;
+  barStyle: EqualizerBarStaticStyle;
+  colorPlan: string[];
+}
+
+const equalizerStaticValueCache = new Map<string, EqualizerStaticValues>();
+
+function getEqualizerStaticValues(options: EqualizerOptions, barCount: number): EqualizerStaticValues {
+  const cacheKey = JSON.stringify({
+    placement: options.placement,
+    spanPercent: options.spanPercent,
+    depthPercent: options.depthPercent,
+    offsetX: options.offsetX,
+    offsetY: options.offsetY,
+    innerPadding: options.innerPadding,
+    alignment: options.alignment,
+    barGap: options.barGap,
+    layoutMode: options.layoutMode,
+    growthDirection: options.growthDirection,
+    colorMode: options.colorMode,
+    primaryColor: options.primaryColor,
+    secondaryColor: options.secondaryColor,
+    accentColor: options.accentColor,
+    opacity: options.opacity,
+    backgroundPlateColor: options.backgroundPlateColor,
+    backgroundPlateOpacity: options.backgroundPlateOpacity,
+    glowEnabled: options.glowEnabled,
+    glowColor: options.glowColor,
+    glowStrength: options.glowStrength,
+    shadowEnabled: options.shadowEnabled,
+    shadowColor: options.shadowColor,
+    shadowStrength: options.shadowStrength,
+    capStyle: options.capStyle,
+    cornerRadius: options.cornerRadius,
+    barCount
+  });
+  const cached = equalizerStaticValueCache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  const layout = getEqualizerLayout(options);
+  const nextValue = {
+    layout,
+    barStyle: {
+      borderRadius: options.capStyle === "rounded" ? `${options.cornerRadius}px` : "0",
+      boxShadow: buildEqualizerShadowParts(options, layout.isHorizontal).join(", ") || "none",
+      opacity: clamp01(options.opacity / 100)
+    },
+    colorPlan: Array.from({ length: barCount }, (_, index) => getBarColor(index, barCount, options))
+  } satisfies EqualizerStaticValues;
+  equalizerStaticValueCache.set(cacheKey, nextValue);
+  return nextValue;
 }
 
 function getBarAmplitude(value: number, options: EqualizerOptions) {

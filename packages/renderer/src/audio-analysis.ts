@@ -22,26 +22,34 @@ export interface AudioDecodeFunction {
   (audioPath: string, sampleRate: number, signal?: AbortSignal): Promise<DecodedAudioData>;
 }
 
+export interface SharedAudioAnalysisCache {
+  decodedAudio: Map<string, Promise<DecodedAudioData>>;
+  spectrum: Map<string, Promise<SceneAudioAnalysisResult>>;
+}
+
 export function createAudioAnalysisAccessor({
   audioPath,
   video,
   signal,
   logger,
-  decodeAudio = decodeAudioFileToMono
+  decodeAudio = decodeAudioFileToMono,
+  sharedCache
 }: {
   audioPath: string;
   video: VideoSettings;
   signal?: AbortSignal;
   logger: AudioAnalysisLogger;
   decodeAudio?: AudioDecodeFunction;
+  sharedCache?: SharedAudioAnalysisCache;
 }) {
-  const decodedAudioCache = new Map<number, Promise<DecodedAudioData>>();
-  const spectrumCache = new Map<string, Promise<SceneAudioAnalysisResult>>();
+  const decodedAudioCache = sharedCache?.decodedAudio ?? new Map<string, Promise<DecodedAudioData>>();
+  const spectrumCache = sharedCache?.spectrum ?? new Map<string, Promise<SceneAudioAnalysisResult>>();
 
   return {
     path: audioPath,
     async getSpectrum(request: SceneAudioAnalysisRequest): Promise<SceneAudioAnalysisResult> {
       const cacheKey = JSON.stringify({
+        audioPath,
         request,
         videoFps: video.fps,
         durationMs: video.durationMs,
@@ -61,10 +69,11 @@ export function createAudioAnalysisAccessor({
         signal,
         logger,
         decodeAudio: async (path, sampleRate, analysisSignal) => {
-          let decodedAudio = decodedAudioCache.get(sampleRate);
+          const decodedAudioKey = `${path}::${sampleRate}`;
+          let decodedAudio = decodedAudioCache.get(decodedAudioKey);
           if (!decodedAudio) {
             decodedAudio = decodeAudio(path, sampleRate, analysisSignal);
-            decodedAudioCache.set(sampleRate, decodedAudio);
+            decodedAudioCache.set(decodedAudioKey, decodedAudio);
           }
 
           return await decodedAudio;

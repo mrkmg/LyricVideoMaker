@@ -21,10 +21,12 @@ import {
   type RenderProgressEvent,
   type RenderStatus,
   type SceneAssetAccessor,
+  type SceneAudioAnalysisResult,
   type SceneComponentDefinition,
+  type ScenePrepareCacheKeyContext,
   type ValidatedSceneComponentInstance
 } from "@lyric-video-maker/core";
-import { createAudioAnalysisAccessor } from "./audio-analysis";
+import { createAudioAnalysisAccessor, type DecodedAudioData, type SharedAudioAnalysisCache } from "./audio-analysis";
 import {
   canRenderWithLiveDom,
   createLiveDomFramePayload,
@@ -47,6 +49,7 @@ export interface CreateFramePreviewSessionInput {
   componentDefinitions: SceneComponentDefinition<Record<string, unknown>>[];
   signal?: AbortSignal;
   assetCache?: PreviewAssetCache;
+  previewCache?: PreviewComputationCache;
 }
 
 export interface FramePreviewResult {
@@ -146,6 +149,13 @@ export interface CachedAssetBody {
 }
 
 export type PreviewAssetCache = Map<string, Promise<CachedAssetBody>>;
+export type PreviewPrepareCache = Map<string, Promise<Record<string, unknown>>>;
+
+export interface PreviewComputationCache {
+  assetBodies: PreviewAssetCache;
+  audioAnalysis: SharedAudioAnalysisCache;
+  prepareResults: PreviewPrepareCache;
+}
 
 const ASSET_URL_PREFIX = "http://lyric-video.local/assets/";
 const PROGRESS_INTERVAL_MS = 250;
@@ -165,6 +175,17 @@ const NOOP_PROGRESS_EMITTER: ProgressEmitter = {
 
 export function createPreviewAssetCache(): PreviewAssetCache {
   return new Map<string, Promise<CachedAssetBody>>();
+}
+
+export function createPreviewComputationCache(): PreviewComputationCache {
+  return {
+    assetBodies: createPreviewAssetCache(),
+    audioAnalysis: {
+      decodedAudio: new Map<string, Promise<DecodedAudioData>>(),
+      spectrum: new Map<string, Promise<SceneAudioAnalysisResult>>()
+    },
+    prepareResults: new Map<string, Promise<Record<string, unknown>>>()
+  };
 }
 
 export async function probeAudioDurationMs(audioPath: string): Promise<number> {
@@ -461,21 +482,31 @@ export async function createFramePreviewSession({
   job,
   componentDefinitions,
   signal,
-  assetCache
+  assetCache,
+  previewCache
 }: CreateFramePreviewSessionInput): Promise<FramePreviewSession> {
   const logger = createRenderLogger(job.id, NOOP_PROGRESS_EMITTER);
   const previewProfiler = createPreviewProfiler(job.id);
   const componentLookup = new Map(componentDefinitions.map((component) => [component.id, component]));
   const enabledComponents = job.components.filter((component) => component.enabled);
+  const effectiveAssetCache = previewCache?.assetBodies ?? assetCache;
   const preloadedAssets = await measurePreviewStage(previewProfiler, "preloadSceneAssets", async () =>
-    await preloadSceneAssets(enabledComponents, componentLookup, job.video, logger, signal, assetCache)
+    await preloadSceneAssets(
+      enabledComponents,
+      componentLookup,
+      job.video,
+      logger,
+      signal,
+      effectiveAssetCache
+    )
   );
   const assets = createAssetAccessor(enabledComponents, preloadedAssets);
   const audio = createAudioAnalysisAccessor({
     audioPath: job.audioPath,
     video: job.video,
     signal,
-    logger
+    logger,
+    sharedCache: previewCache?.audioAnalysis
   });
 
   throwIfAborted(signal);
@@ -492,7 +523,8 @@ export async function createFramePreviewSession({
       assets,
       audio,
       signal,
-      logger
+      logger,
+      prepareCache: previewCache?.prepareResults
     })
   );
   return await createLiveDomRenderSession({
@@ -816,6 +848,7 @@ async function prepareSceneComponents(
     audio: ReturnType<typeof createAudioAnalysisAccessor>;
     signal?: AbortSignal;
     logger: RenderLogger;
+    prepareCache?: PreviewPrepareCache;
   }
 ): Promise<PreparedSceneStackData> {
   const prepared: PreparedSceneStackData = {};
@@ -826,21 +859,81 @@ async function prepareSceneComponents(
       throw new Error(`Scene component definition "${instance.componentId}" is not registered.`);
     }
 
-    prepared[instance.id] =
-      (await definition.prepare?.({
-        instance,
-        options: instance.options,
-        video: context.video,
-        lyrics: context.lyrics,
-        assets: context.assets,
-        audio: context.audio,
-        signal: context.signal
-      })) ?? {};
+    const prepareContext = {
+      instance,
+      options: instance.options,
+      video: context.video,
+      lyrics: context.lyrics,
+      assets: context.assets,
+      audio: context.audio,
+      signal: context.signal
+    };
+    const prepareCacheKey = getComponentPrepareCacheKey(definition, {
+      instance,
+      options: instance.options,
+      video: context.video,
+      audioPath: context.audio.path
+    });
+    const cachedPrepared = prepareCacheKey
+      ? await loadPreparedComponentData(
+          definition,
+          prepareContext,
+          prepareCacheKey,
+          context.prepareCache
+        )
+      : await definition.prepare?.(prepareContext);
+
+    prepared[instance.id] = cachedPrepared ?? {};
 
     context.logger.info(`Prepared component "${instance.componentName}" (${instance.id}).`);
   }
 
   return prepared;
+}
+
+async function loadPreparedComponentData(
+  definition: SceneComponentDefinition<Record<string, unknown>>,
+  context: {
+    instance: ValidatedSceneComponentInstance;
+    options: Record<string, unknown>;
+    video: RenderJob["video"];
+    lyrics: ReturnType<typeof createLyricRuntime>;
+    assets: SceneAssetAccessor;
+    audio: ReturnType<typeof createAudioAnalysisAccessor>;
+    signal?: AbortSignal;
+  },
+  cacheKey: string,
+  prepareCache?: PreviewPrepareCache
+) {
+  if (!prepareCache) {
+    return await definition.prepare?.(context);
+  }
+
+  const cached = prepareCache.get(cacheKey);
+  if (cached) {
+    return await cached;
+  }
+
+  const pending =
+    definition
+      .prepare?.(context)
+      .then((value) => value ?? {}) ?? Promise.resolve<Record<string, unknown>>({});
+  prepareCache.set(cacheKey, pending);
+
+  try {
+    return await pending;
+  } catch (error) {
+    prepareCache.delete(cacheKey);
+    throw error;
+  }
+}
+
+function getComponentPrepareCacheKey(
+  definition: SceneComponentDefinition<Record<string, unknown>>,
+  context: ScenePrepareCacheKeyContext<Record<string, unknown>>
+) {
+  const key = definition.getPrepareCacheKey?.(context);
+  return key ? `${definition.id}::${key}` : null;
 }
 
 export async function preloadSceneAssets(

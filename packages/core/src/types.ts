@@ -136,6 +136,13 @@ export interface ScenePrepareContext<TOptions> {
   signal?: AbortSignal;
 }
 
+export interface ScenePrepareCacheKeyContext<TOptions> {
+  instance: ValidatedSceneComponentInstance;
+  options: TOptions;
+  video: VideoSettings;
+  audioPath: string;
+}
+
 export interface SceneRenderProps<TOptions> {
   instance: ValidatedSceneComponentInstance;
   options: TOptions;
@@ -185,6 +192,7 @@ export interface SceneComponentDefinition<TOptions> {
   options: SceneOptionEntry[];
   defaultOptions: TOptions;
   validate?: (raw: unknown) => TOptions;
+  getPrepareCacheKey?: (ctx: ScenePrepareCacheKeyContext<TOptions>) => string | null;
   prepare?: (ctx: ScenePrepareContext<TOptions>) => Promise<PreparedSceneComponentData>;
   browserRuntime?: SceneBrowserRuntimeDefinition<TOptions>;
   Component: (props: SceneRenderProps<TOptions>) => React.ReactElement | null;

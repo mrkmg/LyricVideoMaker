@@ -69,7 +69,7 @@ vi.mock("playwright", () => ({
   }
 }));
 
-import { createFramePreviewSession } from "../src/index";
+import { createFramePreviewSession, createPreviewComputationCache } from "../src/index";
 
 describe("createFramePreviewSession", () => {
   beforeEach(() => {
@@ -122,6 +122,72 @@ describe("createFramePreviewSession", () => {
       "Preview session has already been disposed."
     );
   });
+
+  it("reuses cached prepare results across preview session recreation when the cache key is stable", async () => {
+    const prepare = vi.fn(async () => ({ token: "prepared" }));
+    const component = createPreparedPreviewComponent(prepare, () => "stable");
+    const previewCache = createPreviewComputationCache();
+
+    const firstSession = await createFramePreviewSession({
+      job: createJob(),
+      componentDefinitions: [component],
+      previewCache
+    });
+    await firstSession.dispose();
+
+    const secondSession = await createFramePreviewSession({
+      job: createJob(),
+      componentDefinitions: [component],
+      previewCache
+    });
+    await secondSession.dispose();
+
+    expect(prepare).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not reuse prepared results when the component has no prepare cache key", async () => {
+    const prepare = vi.fn(async () => ({ token: "prepared" }));
+    const component = createPreparedPreviewComponent(prepare);
+    const previewCache = createPreviewComputationCache();
+
+    const firstSession = await createFramePreviewSession({
+      job: createJob(),
+      componentDefinitions: [component],
+      previewCache
+    });
+    await firstSession.dispose();
+
+    const secondSession = await createFramePreviewSession({
+      job: createJob(),
+      componentDefinitions: [component],
+      previewCache
+    });
+    await secondSession.dispose();
+
+    expect(prepare).toHaveBeenCalledTimes(2);
+  });
+
+  it("invalidates cached prepare results when the prepare cache key changes", async () => {
+    const prepare = vi.fn(async () => ({ token: "prepared" }));
+    const component = createPreparedPreviewComponent(prepare, ({ options }) => String(options.version));
+    const previewCache = createPreviewComputationCache();
+
+    const firstSession = await createFramePreviewSession({
+      job: createJob([{ version: 1 }]),
+      componentDefinitions: [component],
+      previewCache
+    });
+    await firstSession.dispose();
+
+    const secondSession = await createFramePreviewSession({
+      job: createJob([{ version: 2 }]),
+      componentDefinitions: [component],
+      previewCache
+    });
+    await secondSession.dispose();
+
+    expect(prepare).toHaveBeenCalledTimes(2);
+  });
 });
 
 function createPreviewComponent(): SceneComponentDefinition<Record<string, unknown>> {
@@ -149,7 +215,20 @@ function createPreviewComponent(): SceneComponentDefinition<Record<string, unkno
   };
 }
 
-function createJob(): RenderJob {
+function createPreparedPreviewComponent(
+  prepare: SceneComponentDefinition<Record<string, unknown>>["prepare"],
+  getPrepareCacheKey?: SceneComponentDefinition<Record<string, unknown>>["getPrepareCacheKey"]
+): SceneComponentDefinition<Record<string, unknown>> {
+  return {
+    ...createPreviewComponent(),
+    prepare,
+    getPrepareCacheKey
+  };
+}
+
+function createJob(
+  optionOverrides: Array<Record<string, unknown>> = [{}]
+): RenderJob {
   return {
     id: "job-preview",
     audioPath: "song.mp3",
@@ -163,7 +242,7 @@ function createJob(): RenderJob {
         componentId: "preview-component",
         componentName: "Preview Component",
         enabled: true,
-        options: {}
+        options: optionOverrides[0] ?? {}
       }
     ],
     video: {
