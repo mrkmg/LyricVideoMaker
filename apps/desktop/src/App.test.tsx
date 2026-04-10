@@ -11,7 +11,7 @@ import type {
   RenderPreviewResponse
 } from "./electron-api";
 import { App } from "./App";
-import { useFramePreview } from "./use-frame-preview";
+import { useFramePreview, type ResolvedFramePreview } from "./use-frame-preview";
 
 vi.mock("./use-frame-preview", () => ({
   useFramePreview: vi.fn()
@@ -39,9 +39,11 @@ describe("App", () => {
         requestedTimeMs: 1200,
         isLoading: false,
         error: "",
+        imageSwapStartedAtMs: null,
         result: createPreviewResponse()
       },
-      updatePreviewTime: vi.fn()
+      updatePreviewTime: vi.fn(),
+      noteImagePainted: vi.fn()
     });
 
     const api: ElectronApi = {
@@ -85,11 +87,10 @@ describe("App", () => {
     window.lyricVideoApp = api;
   });
 
-  it("defaults to the General inspector and keeps the full preview controls visible", async () => {
+  it("shows the project setup pane by default and keeps the full preview controls visible", async () => {
     render(createElement(App));
 
-    expect(await screen.findByRole("heading", { name: "General" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "General" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Project Setup" })).toBeTruthy();
     expect(screen.getByAltText("Single-frame scene preview")).toBeTruthy();
     expect(screen.getByRole("slider")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Previous Cue" })).toBeTruthy();
@@ -100,21 +101,19 @@ describe("App", () => {
   it("switches the bottom inspector when selecting scene and component items", async () => {
     render(createElement(App));
 
-    await screen.findByRole("heading", { name: "General" });
+    await screen.findByRole("heading", { name: "Project Setup" });
 
     fireEvent.click(screen.getByRole("button", { name: "Scene" }));
-    expect(await screen.findByRole("heading", { name: "Scene" })).toBeTruthy();
     expect(screen.getByText("Saved Scenes")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: /Select Lyrics component/i }));
-    expect(await screen.findByRole("heading", { name: "Lyrics" })).toBeTruthy();
     expect(screen.getByText("Core Options")).toBeTruthy();
   });
 
   it("adds a component, auto-selects it, and falls back to Scene after removal", async () => {
     render(createElement(App));
 
-    await screen.findByRole("heading", { name: "General" });
+    await screen.findByRole("heading", { name: "Project Setup" });
 
     expect(screen.getAllByRole("button", { name: /Select .* component/i })).toHaveLength(1);
 
@@ -123,16 +122,16 @@ describe("App", () => {
     await waitFor(() => {
       expect(screen.getAllByRole("button", { name: /Select .* component/i })).toHaveLength(2);
     });
-    expect(screen.getByRole("heading", { name: "Background" })).toBeTruthy();
+    expect(screen.getByText("Pick image")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Remove Background" }));
-    expect(await screen.findByRole("heading", { name: "Scene" })).toBeTruthy();
+    expect(await screen.findByText("Saved Scenes")).toBeTruthy();
   });
 
   it("opens the render dialog and updates it from progress events", async () => {
     render(createElement(App));
 
-    await screen.findByRole("heading", { name: "General" });
+    await screen.findByRole("heading", { name: "Project Setup" });
 
     fireEvent.click(screen.getByRole("button", { name: "Pick MP3" }));
     fireEvent.click(screen.getByRole("button", { name: "Pick SRT" }));
@@ -224,13 +223,14 @@ function createBootstrapData(): AppBootstrapData {
       }
     ],
     fonts: ["DM Sans", "Arial"],
-    history: []
+    history: [],
+    previewProfilerEnabled: false
   };
 }
 
-function createPreviewResponse(): RenderPreviewResponse {
+function createPreviewResponse(): ResolvedFramePreview {
   return {
-    imageDataUrl: "data:image/png;base64,abc123",
+    imageUrl: "blob:preview-frame",
     frame: 36,
     timeMs: 1200,
     durationMs: 5000,

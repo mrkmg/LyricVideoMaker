@@ -12,6 +12,13 @@ import { useFramePreview } from "./use-frame-preview";
 describe("useFramePreview", () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    vi.stubGlobal(
+      "URL",
+      Object.assign(URL, {
+        createObjectURL: vi.fn(() => "blob:preview"),
+        revokeObjectURL: vi.fn()
+      })
+    );
     window.lyricVideoApp = {
       getBootstrapData: vi.fn(),
       pickPath: vi.fn(),
@@ -58,7 +65,7 @@ describe("useFramePreview", () => {
     });
   });
 
-  it("ignores stale preview responses when a newer request finishes later", async () => {
+  it("coalesces rapid time changes into one active request plus one queued latest target", async () => {
     let resolveFirst: ((value: ReturnType<typeof createPreviewResponse>) => void) | undefined;
     const renderPreviewFrame = vi
       .mocked(window.lyricVideoApp.renderPreviewFrame)
@@ -76,22 +83,72 @@ describe("useFramePreview", () => {
       vi.advanceTimersByTime(250);
     });
 
+    fireEvent.click(screen.getByRole("button", { name: "Jump 1000" }));
     fireEvent.click(screen.getByRole("button", { name: "Jump 2000" }));
 
     await act(async () => {
       vi.advanceTimersByTime(250);
-      await flushMicrotasks();
     });
 
-    expect(renderPreviewFrame).toHaveBeenCalledTimes(2);
-    expect(screen.getByTestId("resolved-time").textContent).toBe("2000");
+    expect(renderPreviewFrame).toHaveBeenCalledTimes(1);
+    expect(renderPreviewFrame).toHaveBeenNthCalledWith(1, expect.objectContaining({ timeMs: 0 }));
+    expect(screen.getByTestId("requested-time").textContent).toBe("2000");
 
     await act(async () => {
       resolveFirst?.(createPreviewResponse(0));
       await flushMicrotasks();
     });
 
+    expect(renderPreviewFrame).toHaveBeenCalledTimes(2);
+    expect(renderPreviewFrame).toHaveBeenNthCalledWith(2, expect.objectContaining({ timeMs: 2000 }));
+  });
+
+  it("keeps the latest requested time and eventually displays the latest resolved frame", async () => {
+    let resolveFirst: ((value: ReturnType<typeof createPreviewResponse>) => void) | undefined;
+    let resolveSecond: ((value: ReturnType<typeof createPreviewResponse>) => void) | undefined;
+    const renderPreviewFrame = vi
+      .mocked(window.lyricVideoApp.renderPreviewFrame)
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFirst = resolve;
+          })
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveSecond = resolve;
+          })
+      );
+
+    render(createElement(PreviewHarness, { composer: createComposer(), paused: false }));
+
+    await act(async () => {
+      vi.advanceTimersByTime(250);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Jump 1000" }));
+    fireEvent.click(screen.getByRole("button", { name: "Jump 2000" }));
+
+    await act(async () => {
+      vi.advanceTimersByTime(250);
+    });
+
+    await act(async () => {
+      resolveFirst?.(createPreviewResponse(0));
+      await flushMicrotasks();
+    });
+
+    expect(screen.getByTestId("requested-time").textContent).toBe("2000");
+    expect(screen.getByTestId("resolved-time").textContent).toBe("0");
+
+    await act(async () => {
+      resolveSecond?.(createPreviewResponse(2000));
+      await flushMicrotasks();
+    });
+
     expect(screen.getByTestId("resolved-time").textContent).toBe("2000");
+    expect(screen.getByTestId("requested-time").textContent).toBe("2000");
   });
 });
 
@@ -109,6 +166,7 @@ function PreviewHarness({
     null,
     createElement("button", { onClick: () => updatePreviewTime(1000) }, "Jump 1000"),
     createElement("button", { onClick: () => updatePreviewTime(2000) }, "Jump 2000"),
+    createElement("div", { "data-testid": "requested-time" }, String(preview.requestedTimeMs)),
     createElement("div", { "data-testid": "resolved-time" }, String(preview.result?.timeMs ?? ""))
   );
 }
@@ -139,7 +197,8 @@ function createScene(): SerializedSceneDefinition {
 
 function createPreviewResponse(timeMs: number) {
   return {
-    imageDataUrl: "data:image/png;base64,abc123",
+    imageBytes: new Uint8Array([1, 2, 3]),
+    imageMimeType: "image/png",
     frame: Math.round(timeMs / 33.33),
     timeMs,
     durationMs: 5000,

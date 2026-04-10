@@ -1,7 +1,11 @@
 import React from "react";
 import { measureNaturalWidth, prepareWithSegments } from "@chenglou/pretext";
 import type { SceneComponentDefinition } from "@lyric-video-maker/core";
-import { SUPPORTED_FONT_FAMILIES } from "@lyric-video-maker/core";
+import {
+  DEFAULT_VIDEO_HEIGHT,
+  DEFAULT_VIDEO_WIDTH,
+  SUPPORTED_FONT_FAMILIES
+} from "@lyric-video-maker/core";
 
 type LyricFadeEasing = "linear" | "ease-in" | "ease-out" | "ease-in-out";
 type LyricVerticalPosition = "top" | "middle" | "bottom";
@@ -9,6 +13,20 @@ type LyricVerticalPosition = "top" | "middle" | "bottom";
 const LYRIC_FONT_WEIGHT = 700;
 const LYRIC_LINE_HEIGHT = 1.15;
 const LYRIC_LETTER_SPACING_EM = -0.03;
+const LYRIC_VERTICAL_INSET = 110;
+
+interface LyricScale {
+  horizontal: number;
+  vertical: number;
+  uniform: number;
+}
+
+interface ScaledLyricLayout {
+  lyricSize: number;
+  horizontalPadding: number;
+  verticalInset: number;
+  borderThickness: number;
+}
 
 export interface LyricsByLineOptions {
   lyricSize: number;
@@ -36,8 +54,13 @@ export const lyricsByLineComponent: SceneComponentDefinition<LyricsByLineOptions
   staticWhenMarkupUnchanged: false,
   browserRuntime: {
     runtimeId: "lyrics-by-line",
-    getInitialState({ options }) {
-      const lyricBlockStyles = getLyricBlockStyles(options.lyricPosition, options.horizontalPadding);
+    getInitialState({ options, video }) {
+      const scaledLayout = getScaledLyricLayout(video, options);
+      const lyricBlockStyles = getLyricBlockStyles(
+        options.lyricPosition,
+        scaledLayout.horizontalPadding,
+        scaledLayout.verticalInset
+      );
 
       return {
         alignItems: lyricBlockStyles.alignItems,
@@ -50,31 +73,48 @@ export const lyricsByLineComponent: SceneComponentDefinition<LyricsByLineOptions
     },
     getFrameState({ options, lyrics, timeMs, video }) {
       const activeCue = lyrics.current;
+      const scaledLayout = getScaledLyricLayout(video, options);
       const activeText = getRenderedLyricText(
         activeCue?.lines ?? [],
         activeCue?.text ?? "",
         options.forceSingleLine
       );
-      const lyricBlockStyles = getLyricBlockStyles(options.lyricPosition, options.horizontalPadding);
-      const paintPadding = getLyricPaintPadding(options.lyricSize, options);
+      const lyricBlockStyles = getLyricBlockStyles(
+        options.lyricPosition,
+        scaledLayout.horizontalPadding,
+        scaledLayout.verticalInset
+      );
+      const paintPadding = getLyricPaintPadding(scaledLayout.lyricSize, {
+        borderEnabled: options.borderEnabled,
+        borderThickness: scaledLayout.borderThickness,
+        shadowEnabled: options.shadowEnabled,
+        shadowIntensity: options.shadowIntensity
+      });
       const lyricFontSize = getRenderedLyricFontSize(
         activeText,
-        options,
+        {
+          lyricSize: scaledLayout.lyricSize,
+          forceSingleLine: options.forceSingleLine,
+          lyricFont: options.lyricFont
+        },
         video.width,
         lyricBlockStyles.horizontalPadding,
         paintPadding
       );
-      const lyricOpacity = activeCue
-        ? getLyricOpacity(activeCue.startMs, activeCue.endMs, timeMs, options)
-        : 0;
-      const renderedPaintPadding = getLyricPaintPadding(lyricFontSize, options);
+      const lyricOpacity = activeCue ? getLyricOpacity(activeCue.startMs, activeCue.endMs, timeMs, options) : 0;
+      const renderedPaintPadding = getLyricPaintPadding(lyricFontSize, {
+        borderEnabled: options.borderEnabled,
+        borderThickness: scaledLayout.borderThickness,
+        shadowEnabled: options.shadowEnabled,
+        shadowIntensity: options.shadowIntensity
+      });
       const letterShadow =
         options.shadowEnabled && options.shadowIntensity > 0
           ? createTextShadow(lyricFontSize, options.shadowColor, options.shadowIntensity)
           : "none";
       const letterStroke =
-        options.borderEnabled && options.borderThickness > 0
-          ? `${options.borderThickness}px ${options.borderColor}`
+        options.borderEnabled && scaledLayout.borderThickness > 0
+          ? `${scaledLayout.borderThickness}px ${options.borderColor}`
           : "";
 
       return {
@@ -236,27 +276,44 @@ export const lyricsByLineComponent: SceneComponentDefinition<LyricsByLineOptions
   },
   Component: ({ options, lyrics, timeMs, video }) => {
     const activeCue = lyrics.current;
+    const scaledLayout = getScaledLyricLayout(video, options);
     const activeText = getRenderedLyricText(activeCue?.lines ?? [], activeCue?.text ?? "", options.forceSingleLine);
-    const lyricOpacity = activeCue
-      ? getLyricOpacity(activeCue.startMs, activeCue.endMs, timeMs, options)
-      : 0;
-    const lyricBlockStyles = getLyricBlockStyles(options.lyricPosition, options.horizontalPadding);
-    const estimatedPaintPadding = getLyricPaintPadding(options.lyricSize, options);
+    const lyricOpacity = activeCue ? getLyricOpacity(activeCue.startMs, activeCue.endMs, timeMs, options) : 0;
+    const lyricBlockStyles = getLyricBlockStyles(
+      options.lyricPosition,
+      scaledLayout.horizontalPadding,
+      scaledLayout.verticalInset
+    );
+    const estimatedPaintPadding = getLyricPaintPadding(scaledLayout.lyricSize, {
+      borderEnabled: options.borderEnabled,
+      borderThickness: scaledLayout.borderThickness,
+      shadowEnabled: options.shadowEnabled,
+      shadowIntensity: options.shadowIntensity
+    });
     const lyricFontSize = getRenderedLyricFontSize(
       activeText,
-      options,
+      {
+        lyricSize: scaledLayout.lyricSize,
+        forceSingleLine: options.forceSingleLine,
+        lyricFont: options.lyricFont
+      },
       video.width,
       lyricBlockStyles.horizontalPadding,
       estimatedPaintPadding
     );
-    const paintPadding = getLyricPaintPadding(lyricFontSize, options);
+    const paintPadding = getLyricPaintPadding(lyricFontSize, {
+      borderEnabled: options.borderEnabled,
+      borderThickness: scaledLayout.borderThickness,
+      shadowEnabled: options.shadowEnabled,
+      shadowIntensity: options.shadowIntensity
+    });
     const letterShadow =
       options.shadowEnabled && options.shadowIntensity > 0
         ? createTextShadow(lyricFontSize, options.shadowColor, options.shadowIntensity)
         : "none";
     const letterStroke =
-      options.borderEnabled && options.borderThickness > 0
-        ? `${options.borderThickness}px ${options.borderColor}`
+      options.borderEnabled && scaledLayout.borderThickness > 0
+        ? `${scaledLayout.borderThickness}px ${options.borderColor}`
         : undefined;
 
     return (
@@ -296,12 +353,16 @@ export const lyricsByLineComponent: SceneComponentDefinition<LyricsByLineOptions
   }
 };
 
-function getLyricBlockStyles(position: LyricVerticalPosition, horizontalPadding: number) {
+function getLyricBlockStyles(
+  position: LyricVerticalPosition,
+  horizontalPadding: number,
+  verticalInset: number
+) {
   switch (position) {
     case "top":
       return {
         alignItems: "flex-start" as const,
-        padding: `110px ${horizontalPadding}px 0`,
+        padding: `${verticalInset}px ${horizontalPadding}px 0`,
         horizontalPadding
       };
     case "middle":
@@ -314,10 +375,43 @@ function getLyricBlockStyles(position: LyricVerticalPosition, horizontalPadding:
     default:
       return {
         alignItems: "flex-end" as const,
-        padding: `0 ${horizontalPadding}px 110px`,
+        padding: `0 ${horizontalPadding}px ${verticalInset}px`,
         horizontalPadding
       };
   }
+}
+
+function getScaledLyricLayout(
+  video: { width: number; height: number },
+  options: Pick<LyricsByLineOptions, "lyricSize" | "horizontalPadding" | "borderThickness">
+): ScaledLyricLayout {
+  const scale = getLyricScale(video);
+
+  return {
+    lyricSize: scaleMeasurement(options.lyricSize, scale.uniform),
+    horizontalPadding: scaleMeasurement(options.horizontalPadding, scale.horizontal),
+    verticalInset: scaleMeasurement(LYRIC_VERTICAL_INSET, scale.vertical),
+    borderThickness: scaleMeasurement(options.borderThickness, scale.uniform)
+  };
+}
+
+function getLyricScale(video: { width: number; height: number }): LyricScale {
+  const horizontal = safeScale(video.width, DEFAULT_VIDEO_WIDTH);
+  const vertical = safeScale(video.height, DEFAULT_VIDEO_HEIGHT);
+
+  return {
+    horizontal,
+    vertical,
+    uniform: Math.min(horizontal, vertical)
+  };
+}
+
+function safeScale(value: number, baseline: number) {
+  return value > 0 && baseline > 0 ? value / baseline : 1;
+}
+
+function scaleMeasurement(value: number, scale: number) {
+  return Math.round(value * scale * 10) / 10;
 }
 
 function getRenderedLyricText(lines: string[], fallbackText: string, forceSingleLine: boolean) {

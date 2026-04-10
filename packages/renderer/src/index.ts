@@ -46,6 +46,7 @@ export interface CreateFramePreviewSessionInput {
   job: RenderJob;
   componentDefinitions: SceneComponentDefinition<Record<string, unknown>>[];
   signal?: AbortSignal;
+  assetCache?: PreviewAssetCache;
 }
 
 export interface FramePreviewResult {
@@ -72,6 +73,17 @@ interface RenderProfiler {
   enabled: boolean;
   totalStartMs: number;
   stages: Record<RenderProfileStage, number>;
+}
+
+type PreviewProfileStage =
+  | "preloadSceneAssets"
+  | "prepareSceneComponents"
+  | "updateLiveDomScene"
+  | "captureScreenshot";
+
+interface PreviewProfiler {
+  enabled: boolean;
+  jobId: string;
 }
 
 interface FrameMuxer {
@@ -127,6 +139,14 @@ export interface PreloadedAsset {
   body: Buffer;
 }
 
+export interface CachedAssetBody {
+  body: Buffer;
+  contentType: string;
+  normalized: boolean;
+}
+
+export type PreviewAssetCache = Map<string, Promise<CachedAssetBody>>;
+
 const ASSET_URL_PREFIX = "http://lyric-video.local/assets/";
 const PROGRESS_INTERVAL_MS = 250;
 const FFMPEG_EXECUTABLE = resolveExecutablePath(ffmpegPath, "ffmpeg");
@@ -142,6 +162,10 @@ const FFMPEG_STDERR_BUFFER_LIMIT_BYTES = 64 * 1024;
 const NOOP_PROGRESS_EMITTER: ProgressEmitter = {
   emit() {}
 };
+
+export function createPreviewAssetCache(): PreviewAssetCache {
+  return new Map<string, Promise<CachedAssetBody>>();
+}
 
 export async function probeAudioDurationMs(audioPath: string): Promise<number> {
   const output = await runCommand(FFPROBE_EXECUTABLE, [
@@ -436,12 +460,16 @@ export async function renderLyricVideo({
 export async function createFramePreviewSession({
   job,
   componentDefinitions,
-  signal
+  signal,
+  assetCache
 }: CreateFramePreviewSessionInput): Promise<FramePreviewSession> {
   const logger = createRenderLogger(job.id, NOOP_PROGRESS_EMITTER);
+  const previewProfiler = createPreviewProfiler(job.id);
   const componentLookup = new Map(componentDefinitions.map((component) => [component.id, component]));
   const enabledComponents = job.components.filter((component) => component.enabled);
-  const preloadedAssets = await preloadSceneAssets(enabledComponents, componentLookup, job.video, logger, signal);
+  const preloadedAssets = await measurePreviewStage(previewProfiler, "preloadSceneAssets", async () =>
+    await preloadSceneAssets(enabledComponents, componentLookup, job.video, logger, signal, assetCache)
+  );
   const assets = createAssetAccessor(enabledComponents, preloadedAssets);
   const audio = createAudioAnalysisAccessor({
     audioPath: job.audioPath,
@@ -457,14 +485,16 @@ export async function createFramePreviewSession({
   }
 
   const initialLyricsRuntime = createLyricRuntime(job.lyrics, 0);
-  const prepared = await prepareSceneComponents(enabledComponents, componentLookup, {
-    video: job.video,
-    lyrics: initialLyricsRuntime,
-    assets,
-    audio,
-    signal,
+  const prepared = await measurePreviewStage(previewProfiler, "prepareSceneComponents", async () =>
+    await prepareSceneComponents(enabledComponents, componentLookup, {
+      video: job.video,
+      lyrics: initialLyricsRuntime,
+      assets,
+      audio,
+      signal,
       logger
-  });
+    })
+  );
   return await createLiveDomRenderSession({
     sessionLabel: "preview",
     preferBeginFrame: shouldUseBeginFrame(),
@@ -482,7 +512,8 @@ export async function createFramePreviewSession({
       prepared
     }),
     signal,
-    logger
+    logger,
+    previewProfiler
   });
 }
 
@@ -498,7 +529,8 @@ async function createLiveDomRenderSession({
   scenePayload,
   signal,
   logger,
-  profiler
+  profiler,
+  previewProfiler
 }: {
   sessionLabel: string;
   preferBeginFrame: boolean;
@@ -512,6 +544,7 @@ async function createLiveDomRenderSession({
   signal?: AbortSignal;
   logger: RenderLogger;
   profiler?: RenderProfiler;
+  previewProfiler?: PreviewProfiler;
 }): Promise<FramePreviewSession> {
   let browser: Browser | null = null;
   let browserContext: BrowserContext | null = null;
@@ -519,6 +552,7 @@ async function createLiveDomRenderSession({
   let cdpSession: CDPSession | null = null;
   let disposed = false;
   let beginFrameFallbackLogged = false;
+  let renderChain = Promise.resolve();
   const lyricRuntimeCursor = createLyricRuntimeCursor(job.lyrics, 0);
 
   try {
@@ -558,69 +592,78 @@ async function createLiveDomRenderSession({
 
   return {
     async renderFrame({ frame }) {
-      if (disposed || !page || !cdpSession) {
-        throw new Error("Preview session has already been disposed.");
-      }
+      const nextRender = renderChain.then(async () => {
+        if (disposed || !page || !cdpSession) {
+          throw new Error("Preview session has already been disposed.");
+        }
 
-      throwIfAborted(signal);
+        throwIfAborted(signal);
 
-      const safeFrame = Math.max(0, Math.min(job.video.durationInFrames - 1, Math.floor(frame)));
-      const timeMs = Math.min(job.video.durationMs, Math.round((safeFrame / job.video.fps) * 1000));
-      traceRenderStep(logger, sessionLabel, safeFrame, "frame-start");
-      const lyrics = toBrowserLyricRuntime(lyricRuntimeCursor.getRuntimeAt(timeMs));
-      const framePayload = maybeMeasureSync(profiler, "frameState", () =>
-        createLiveDomFramePayload({
-          components,
-          componentLookup,
+        const safeFrame = Math.max(0, Math.min(job.video.durationInFrames - 1, Math.floor(frame)));
+        const timeMs = Math.min(job.video.durationMs, Math.round((safeFrame / job.video.fps) * 1000));
+        traceRenderStep(logger, sessionLabel, safeFrame, "frame-start");
+        const lyrics = toBrowserLyricRuntime(lyricRuntimeCursor.getRuntimeAt(timeMs));
+        const framePayload = maybeMeasureSync(profiler, "frameState", () =>
+          createLiveDomFramePayload({
+            components,
+            componentLookup,
+            frame: safeFrame,
+            timeMs,
+            video: job.video,
+            lyrics,
+            assets,
+            prepared
+          })
+        );
+
+        traceRenderStep(logger, sessionLabel, safeFrame, "browser-update-start");
+        await measurePreviewStage(previewProfiler, "updateLiveDomScene", async () => {
+          await withTimeout(
+            maybeMeasureAsync(profiler, "browserUpdate", async () => {
+              await updateLiveDomScene(page!, framePayload);
+            }),
+            createFrameStageTimeoutError({
+              sessionLabel,
+              frame: safeFrame,
+              stage: "browser update"
+            }),
+            FRAME_STAGE_TIMEOUT_MS
+          );
+        }, { frame: safeFrame, timeMs });
+        traceRenderStep(logger, sessionLabel, safeFrame, "browser-update-done");
+
+        traceRenderStep(logger, sessionLabel, safeFrame, "capture-start");
+        const capture = await measurePreviewStage(previewProfiler, "captureScreenshot", async () => {
+          return await withTimeout(
+            maybeMeasureAsync(profiler, "capture", async () => {
+              return await captureFrameBuffer({
+                cdpSession: cdpSession!,
+                fps: job.video.fps,
+                preferBeginFrame,
+                logger,
+                beginFrameFallbackLogged
+              });
+            }),
+            createFrameStageTimeoutError({
+              sessionLabel,
+              frame: safeFrame,
+              stage: "capture"
+            }),
+            FRAME_STAGE_TIMEOUT_MS
+          );
+        }, { frame: safeFrame, timeMs });
+        traceRenderStep(logger, sessionLabel, safeFrame, "capture-done");
+        beginFrameFallbackLogged = capture.beginFrameFallbackLogged;
+
+        return {
+          png: capture.buffer,
           frame: safeFrame,
-          timeMs,
-          video: job.video,
-          lyrics,
-          assets,
-          prepared
-        })
-      );
+          timeMs
+        };
+      });
 
-      traceRenderStep(logger, sessionLabel, safeFrame, "browser-update-start");
-      await withTimeout(
-        maybeMeasureAsync(profiler, "browserUpdate", async () => {
-          await updateLiveDomScene(page!, framePayload);
-        }),
-        createFrameStageTimeoutError({
-          sessionLabel,
-          frame: safeFrame,
-          stage: "browser update"
-        }),
-        FRAME_STAGE_TIMEOUT_MS
-      );
-      traceRenderStep(logger, sessionLabel, safeFrame, "browser-update-done");
-
-      traceRenderStep(logger, sessionLabel, safeFrame, "capture-start");
-      const capture = await withTimeout(
-        maybeMeasureAsync(profiler, "capture", async () => {
-          return await captureFrameBuffer({
-            cdpSession: cdpSession!,
-            fps: job.video.fps,
-            preferBeginFrame,
-            logger,
-            beginFrameFallbackLogged
-          });
-        }),
-        createFrameStageTimeoutError({
-          sessionLabel,
-          frame: safeFrame,
-          stage: "capture"
-        }),
-        FRAME_STAGE_TIMEOUT_MS
-      );
-      traceRenderStep(logger, sessionLabel, safeFrame, "capture-done");
-      beginFrameFallbackLogged = capture.beginFrameFallbackLogged;
-
-      return {
-        png: capture.buffer,
-        frame: safeFrame,
-        timeMs
-      };
+      renderChain = nextRender.then(() => undefined, () => undefined);
+      return await nextRender;
     },
     async dispose() {
       if (disposed) {
@@ -805,7 +848,8 @@ export async function preloadSceneAssets(
   componentLookup: Map<string, SceneComponentDefinition<Record<string, unknown>>>,
   video: RenderJob["video"],
   logger: RenderLogger,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  assetCache?: PreviewAssetCache
 ): Promise<Map<string, PreloadedAsset>> {
   const assets = new Map<string, PreloadedAsset>();
 
@@ -825,20 +869,19 @@ export async function preloadSceneAssets(
         continue;
       }
 
-      const normalizedBody = await normalizeImageAsset(optionValue, video, signal, logger);
-      const originalBody = normalizedBody ? null : await readFile(optionValue);
+      const cachedBody = await loadCachedAssetBody(optionValue, video, signal, logger, assetCache);
       const asset = {
         instanceId: instance.id,
         optionId: field.id,
         path: optionValue,
         url: `${ASSET_URL_PREFIX}${encodeURIComponent(instance.id)}-${encodeURIComponent(field.id)}${getExtensionSuffix(optionValue)}`,
-        contentType: normalizedBody ? "image/png" : getMimeType(optionValue),
-        body: normalizedBody ?? originalBody!
+        contentType: cachedBody.contentType,
+        body: cachedBody.body
       } satisfies PreloadedAsset;
 
       assets.set(getAssetKey(instance.id, field.id), asset);
       logger.info(
-        `Preloaded image asset "${instance.id}/${field.id}" from ${optionValue}${normalizedBody ? " (normalized)" : ""}`
+        `Preloaded image asset "${instance.id}/${field.id}" from ${optionValue}${cachedBody.normalized ? " (normalized)" : ""}`
       );
     }
   }
@@ -1506,6 +1549,38 @@ function createRenderProfiler(): RenderProfiler {
   };
 }
 
+function createPreviewProfiler(jobId: string): PreviewProfiler {
+  return {
+    enabled: process.env.LYRIC_VIDEO_PREVIEW_PROFILE === "1",
+    jobId
+  };
+}
+
+async function measurePreviewStage<T>(
+  profiler: PreviewProfiler | undefined,
+  stage: PreviewProfileStage,
+  run: () => Promise<T>,
+  details: Record<string, unknown> = {}
+): Promise<T> {
+  if (!profiler?.enabled) {
+    return await run();
+  }
+
+  const startMs = performance.now();
+  try {
+    return await run();
+  } finally {
+    console.info(
+      `[preview-profile:renderer] ${JSON.stringify({
+        jobId: profiler.jobId,
+        stage,
+        durationMs: roundMs(performance.now() - startMs),
+        ...details
+      })}`
+    );
+  }
+}
+
 function maybeMeasureSync<T>(
   profiler: RenderProfiler | undefined,
   stage: RenderProfileStage,
@@ -2024,6 +2099,53 @@ function normalizePositiveInteger(value: number | string | undefined) {
   }
 
   return undefined;
+}
+
+async function loadCachedAssetBody(
+  path: string,
+  video: RenderJob["video"],
+  signal: AbortSignal | undefined,
+  logger: RenderLogger,
+  assetCache?: PreviewAssetCache
+): Promise<CachedAssetBody> {
+  const cacheKey = `${path}::${video.width}x${video.height}`;
+  if (!assetCache) {
+    return await createCachedAssetBody(path, video, signal, logger);
+  }
+
+  const cached = assetCache.get(cacheKey);
+  if (cached) {
+    return await cached;
+  }
+
+  const pending = createCachedAssetBody(path, video, signal, logger).catch((error) => {
+    assetCache.delete(cacheKey);
+    throw error;
+  });
+  assetCache.set(cacheKey, pending);
+  return await pending;
+}
+
+async function createCachedAssetBody(
+  path: string,
+  video: RenderJob["video"],
+  signal: AbortSignal | undefined,
+  logger: RenderLogger
+): Promise<CachedAssetBody> {
+  const normalizedBody = await normalizeImageAsset(path, video, signal, logger);
+  if (normalizedBody) {
+    return {
+      body: normalizedBody,
+      contentType: "image/png",
+      normalized: true
+    };
+  }
+
+  return {
+    body: await readFile(path),
+    contentType: getMimeType(path),
+    normalized: false
+  };
 }
 
 async function normalizeImageAsset(

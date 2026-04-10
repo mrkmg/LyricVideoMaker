@@ -6,14 +6,17 @@ import { useFramePreview } from "../use-frame-preview";
 
 export function PreviewPanel({
   paused,
-  composer
+  composer,
+  profilerEnabled = false
 }: {
   composer: ComposerState;
   paused: boolean;
+  profilerEnabled?: boolean;
 }) {
-  const { enabled, preview, updatePreviewTime } = useFramePreview({
+  const { enabled, preview, updatePreviewTime, noteImagePainted } = useFramePreview({
     composer,
-    paused
+    paused,
+    profilerEnabled
   });
   const video = composer.video;
   const frameCount = preview.result
@@ -53,18 +56,19 @@ export function PreviewPanel({
 
       <div className="preview-main">
         <div
-          className={`preview-stage-shell${preview.result?.imageDataUrl ? "" : " is-empty"}`}
+          className={`preview-stage-shell${preview.result?.imageUrl ? "" : " is-empty"}`}
           style={
             {
               "--preview-aspect-ratio": `${video.width} / ${video.height}`
             } as CSSProperties
           }
         >
-          {preview.result?.imageDataUrl ? (
+          {preview.result?.imageUrl ? (
             <img
               className="preview-image"
-              src={preview.result.imageDataUrl}
+              src={preview.result.imageUrl}
               alt="Single-frame scene preview"
+              onLoad={noteImagePainted}
             />
           ) : (
             <div className="preview-empty">{emptyStateMessage}</div>

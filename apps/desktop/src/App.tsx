@@ -597,7 +597,11 @@ export function App() {
 
         <section className="workspace-main-pane" ref={mainPaneRef}>
           <div className="workspace-pane workspace-preview-pane">
-            <PreviewPanel composer={composer} paused={previewPaused} />
+            <PreviewPanel
+              composer={composer}
+              paused={previewPaused}
+              profilerEnabled={bootstrap.previewProfilerEnabled}
+            />
           </div>
 
           <div

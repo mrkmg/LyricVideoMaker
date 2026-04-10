@@ -168,6 +168,79 @@ describe("scene registry components", () => {
     });
   });
 
+  it("scales lyric measurements for smaller output resolutions", () => {
+    const lyrics = createLyricRuntime(
+      [
+        {
+          index: 1,
+          startMs: 1000,
+          endMs: 2000,
+          text: "Scaled line",
+          lines: ["Scaled line"]
+        }
+      ],
+      1050
+    );
+
+    render(
+      lyricsByLineComponent.Component({
+        instance: {
+          id: "lyrics-1",
+          componentId: "lyrics-by-line",
+          componentName: "Lyrics by Line",
+          enabled: true,
+          options: {}
+        },
+        options: {
+          lyricSize: 80,
+          forceSingleLine: false,
+          horizontalPadding: 96,
+          lyricFont: "Montserrat",
+          lyricColor: "#ffffff",
+          fadeInDurationMs: 200,
+          fadeInEasing: "linear",
+          fadeOutDurationMs: 400,
+          fadeOutEasing: "ease-in",
+          lyricPosition: "top",
+          borderEnabled: true,
+          borderColor: "#33ccff",
+          borderThickness: 5,
+          shadowEnabled: true,
+          shadowColor: "#ff0000",
+          shadowIntensity: 60
+        },
+        frame: 31,
+        timeMs: 1050,
+        video: {
+          width: 1280,
+          height: 720,
+          fps: 30,
+          durationMs: 2000,
+          durationInFrames: 60
+        },
+        lyrics,
+        assets: {
+          getUrl: vi.fn()
+        },
+        prepared: {}
+      })
+    );
+
+    const lyricText = screen.getByText("Scaled line") as HTMLElement;
+    const lyricContainer = lyricText.parentElement as HTMLElement;
+
+    expect(lyricText.style.fontSize).toBe("53.3px");
+    expect(lyricText.style.webkitTextStroke).toBe("3.3px #33ccff");
+    expect(lyricText.style.textShadow).toBe(
+      "0 3px 8px rgba(255, 0, 0, 0.6), 0 0 1px rgba(255, 0, 0, 0.8), 0 0 10px rgba(255, 0, 0, 0.27)"
+    );
+    expect(lyricText.style.padding).toBe("15px");
+    expect(lyricContainer).toHaveStyle({
+      alignItems: "flex-start",
+      padding: "73.3px 64px 0"
+    });
+  });
+
   it("builds live DOM lyric frame state with stable text and opacity data", () => {
     const lyrics = createLyricRuntime(
       [
@@ -272,6 +345,111 @@ describe("scene registry components", () => {
     expect(String(lyricFrameState.textShadow)).toContain("rgba(255, 0, 0, 0.6)");
   });
 
+  it("scales live DOM lyric state for non-1080p video", () => {
+    const lyrics = createLyricRuntime(
+      [
+        {
+          index: 1,
+          startMs: 1000,
+          endMs: 2000,
+          text: "Styled line",
+          lines: ["Styled line"]
+        }
+      ],
+      1050
+    );
+
+    const initialState = lyricsByLineComponent.browserRuntime?.getInitialState?.({
+      instance: {
+        id: "lyrics-1",
+        componentId: "lyrics-by-line",
+        componentName: "Lyrics by Line",
+        enabled: true,
+        options: {}
+      },
+      options: {
+        ...lyricsByLineComponent.defaultOptions,
+        lyricPosition: "top",
+        horizontalPadding: 96,
+        lyricFont: "Montserrat"
+      },
+      video: {
+        width: 1280,
+        height: 720,
+        fps: 30,
+        durationMs: 2000,
+        durationInFrames: 60
+      },
+      lyrics: {
+        current: lyrics.current,
+        next: lyrics.next
+      },
+      assets: {
+        getUrl: vi.fn()
+      },
+      prepared: {}
+    });
+
+    const frameState = lyricsByLineComponent.browserRuntime?.getFrameState?.({
+      instance: {
+        id: "lyrics-1",
+        componentId: "lyrics-by-line",
+        componentName: "Lyrics by Line",
+        enabled: true,
+        options: {}
+      },
+      options: {
+        ...lyricsByLineComponent.defaultOptions,
+        lyricPosition: "top",
+        horizontalPadding: 96,
+        fadeInDurationMs: 200,
+        fadeInEasing: "linear",
+        fadeOutDurationMs: 400,
+        fadeOutEasing: "ease-in",
+        borderEnabled: true,
+        borderColor: "#33ccff",
+        borderThickness: 5,
+        shadowEnabled: true,
+        shadowColor: "#ff0000",
+        shadowIntensity: 60
+      },
+      frame: 31,
+      timeMs: 1050,
+      video: {
+        width: 1280,
+        height: 720,
+        fps: 30,
+        durationMs: 2000,
+        durationInFrames: 60
+      },
+      lyrics: {
+        current: lyrics.current,
+        next: lyrics.next
+      },
+      assets: {
+        getUrl: vi.fn()
+      },
+      prepared: {}
+    });
+
+    const lyricInitialState = initialState as Record<string, unknown>;
+    const lyricFrameState = frameState as Record<string, unknown>;
+
+    expect(lyricInitialState).toMatchObject({
+      alignItems: "flex-start",
+      padding: "73.3px 64px 0",
+      fontFamily: "\"Montserrat\", sans-serif"
+    });
+    expect(lyricFrameState).toMatchObject({
+      text: "Styled line",
+      opacity: 0.25,
+      fontSize: 48,
+      padding: "14px",
+      webkitTextStroke: "3.3px #33ccff"
+    });
+    expect(String(lyricFrameState.textShadow)).toContain("rgba(255, 0, 0, 0.6)");
+  });
+
   it("forces multi-line lyrics onto a single fitted line when enabled", () => {
     const lyrics = createLyricRuntime(
       [
@@ -323,7 +501,7 @@ describe("scene registry components", () => {
     expect(lyricText).toHaveStyle({
       whiteSpace: "nowrap"
     });
-    expect(Number.parseFloat((lyricText as HTMLElement).style.fontSize)).toBeLessThan(80);
+    expect(Number.parseFloat((lyricText as HTMLElement).style.fontSize)).toBeLessThan(25);
   });
 
   it("defines the preset scene as stacked components in the expected order", () => {

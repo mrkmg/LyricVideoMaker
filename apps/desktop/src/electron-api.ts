@@ -12,6 +12,7 @@ export interface AppBootstrapData {
   components: SerializedSceneComponentDefinition[];
   fonts: string[];
   history: RenderHistoryEntry[];
+  previewProfilerEnabled: boolean;
 }
 
 export type FilePickKind = "audio" | "subtitle" | "image" | "output";
@@ -33,7 +34,8 @@ export interface RenderPreviewRequest {
 }
 
 export interface RenderPreviewResponse {
-  imageDataUrl: string;
+  imageBytes: Uint8Array;
+  imageMimeType: string;
   frame: number;
   timeMs: number;
   durationMs: number;

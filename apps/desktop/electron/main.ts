@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { performance } from "node:perf_hooks";
 import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import {
   SUPPORTED_FONT_FAMILIES,
@@ -15,6 +16,7 @@ import {
   type SerializedSceneDefinition
 } from "@lyric-video-maker/core";
 import {
+  createPreviewAssetCache,
   createFramePreviewSession,
   probeAudioDurationMs,
   renderLyricVideo,
@@ -34,6 +36,7 @@ import {
   loadUserScenes,
   saveUserScene
 } from "./scene-library";
+import { createLatestOnlyPreviewRenderQueue } from "./preview-render-queue";
 
 let mainWindow: BrowserWindow | null = null;
 let userScenes: SerializedSceneDefinition[] = [];
@@ -52,6 +55,79 @@ interface PreviewSessionState {
 }
 
 let previewSessionState: PreviewSessionState | null = null;
+const previewAssetCache = createPreviewAssetCache();
+const PREVIEW_MAX_WIDTH = 960;
+const PREVIEW_MAX_HEIGHT = 540;
+const previewProfilerEnabled =
+  !app.isPackaged && process.env.LYRIC_VIDEO_PREVIEW_PROFILE === "1";
+
+const previewRenderQueue = createLatestOnlyPreviewRenderQueue<
+  RenderPreviewRequest,
+  FramePreviewSession,
+  RenderPreviewResponse
+>({
+  getSessionKey: getPreviewSessionKey,
+  createSession: async (request) => {
+    const sessionInfo = await getOrCreatePreviewSession(request);
+    return {
+      key: sessionInfo.key,
+      session: sessionInfo.session
+    };
+  },
+  disposeSession: async (sessionState) => {
+    if (previewSessionState?.key === sessionState.key) {
+      await disposePreviewSession();
+      return;
+    }
+
+    await sessionState.session.dispose();
+  },
+  render: async (sessionState, request) => {
+    const timingStartMs = performance.now();
+    const activeSessionState =
+      previewSessionState?.key === sessionState.key
+        ? previewSessionState
+        : await getOrCreatePreviewSession(request);
+    const requestedFrame = Math.max(
+      0,
+      Math.min(
+        activeSessionState.job.video.durationInFrames - 1,
+        msToFrame(clamp(request.timeMs, 0, activeSessionState.durationMs), activeSessionState.job.video.fps)
+      )
+    );
+
+    const preview = await activeSessionState.session.renderFrame({ frame: requestedFrame });
+    const cueSummary = getPreviewCueSummary(activeSessionState.cues, preview.timeMs);
+    const imageBytes = new Uint8Array(preview.png);
+    const response = {
+      imageBytes,
+      imageMimeType: "image/png",
+      frame: preview.frame,
+      timeMs: preview.timeMs,
+      durationMs: activeSessionState.durationMs,
+      currentCue: cueSummary.currentCue,
+      previousCue: cueSummary.previousCue,
+      nextCue: cueSummary.nextCue
+    } satisfies RenderPreviewResponse;
+
+    if (previewProfilerEnabled) {
+      console.info(
+        `[preview-profile:ipc] ${JSON.stringify({
+          reusedSession: activeSessionState.key === sessionState.key,
+          requestedFrame,
+          payloadBytes: imageBytes.byteLength,
+          totalResponseMs: roundPreviewMs(performance.now() - timingStartMs)
+        })}`
+      );
+    }
+
+    return {
+      response,
+      sessionKey: activeSessionState.key,
+      reusedSession: activeSessionState.key === sessionState.key
+    };
+  }
+});
 
 function createMainWindow() {
   mainWindow = new BrowserWindow({
@@ -77,13 +153,13 @@ function createMainWindow() {
   }
 
   mainWindow.once("ready-to-show", () => {
-    mainWindow?.maximize();
+    // mainWindow?.maximize();
     mainWindow?.show();
   });
 
   mainWindow.on("closed", () => {
     mainWindow = null;
-    void disposePreviewSession();
+    void previewRenderQueue.dispose();
   });
 }
 
@@ -113,7 +189,8 @@ function registerIpcHandlers() {
     ],
     components: builtInSceneComponents.map((component) => serializeSceneComponentDefinition(component)),
     fonts: [...SUPPORTED_FONT_FAMILIES],
-    history: getHistory()
+    history: getHistory(),
+    previewProfilerEnabled
   }));
 
   ipcMain.handle(
@@ -179,7 +256,7 @@ function registerIpcHandlers() {
   });
 
   ipcMain.handle("render:start", async (_event, request: StartRenderRequest) => {
-    await disposePreviewSession();
+    await previewRenderQueue.dispose();
 
     const cues = await getSubtitleCues(request.subtitlePath);
     const durationMs = await getAudioDuration(request.audioPath);
@@ -223,28 +300,8 @@ function registerIpcHandlers() {
   });
 
   ipcMain.handle("preview:render-frame", async (_event, request: RenderPreviewRequest) => {
-    const nextSession = await getOrCreatePreviewSession(request);
-    const requestedFrame = Math.max(
-      0,
-      Math.min(
-        nextSession.job.video.durationInFrames - 1,
-        msToFrame(clamp(request.timeMs, 0, nextSession.durationMs), nextSession.job.video.fps)
-      )
-    );
-
     try {
-      const preview = await nextSession.session.renderFrame({ frame: requestedFrame });
-      const cueSummary = getPreviewCueSummary(nextSession.cues, preview.timeMs);
-
-      return {
-        imageDataUrl: `data:image/png;base64,${preview.png.toString("base64")}`,
-        frame: preview.frame,
-        timeMs: preview.timeMs,
-        durationMs: nextSession.durationMs,
-        currentCue: cueSummary.currentCue,
-        previousCue: cueSummary.previousCue,
-        nextCue: cueSummary.nextCue
-      } satisfies RenderPreviewResponse;
+      return await previewRenderQueue.render(request);
     } catch (error) {
       await disposePreviewSession();
       throw error;
@@ -252,7 +309,7 @@ function registerIpcHandlers() {
   });
 
   ipcMain.handle("preview:dispose", async () => {
-    await disposePreviewSession();
+    await previewRenderQueue.dispose();
   });
 }
 
@@ -367,6 +424,7 @@ async function getAudioDuration(audioPath: string) {
 }
 
 async function getOrCreatePreviewSession(request: RenderPreviewRequest) {
+  const timingStartMs = performance.now();
   const cues = await getSubtitleCues(request.subtitlePath);
   const durationMs = await getAudioDuration(request.audioPath);
   const job = createRenderJob({
@@ -377,34 +435,43 @@ async function getOrCreatePreviewSession(request: RenderPreviewRequest) {
     componentDefinitions: builtInSceneComponents,
     cues,
     durationMs,
-    video: request.video,
+    video: getPreviewVideoSettings(request),
     validationContext: {
       isFileAccessible: existsSync
     }
   });
-  const key = JSON.stringify({
-    audioPath: request.audioPath,
-    subtitlePath: request.subtitlePath,
-    scene: request.scene,
-    video: {
-      width: job.video.width,
-      height: job.video.height,
-      fps: job.video.fps
-    }
-  });
+  const key = getPreviewSessionKey(request, job.video.width, job.video.height);
+  const reusedExistingSession = Boolean(previewSessionState && previewSessionState.key === key);
 
-  if (!previewSessionState || previewSessionState.key !== key) {
+  if (!reusedExistingSession) {
     await disposePreviewSession();
     previewSessionState = {
       key,
       session: await createFramePreviewSession({
         job,
-        componentDefinitions: builtInSceneComponents
+        componentDefinitions: builtInSceneComponents,
+        assetCache: previewAssetCache
       }),
       job,
       cues,
       durationMs
     };
+  }
+
+  if (previewProfilerEnabled) {
+    console.info(
+      `[preview-profile:session] ${JSON.stringify({
+        reusedExistingSession,
+        key,
+        width: job.video.width,
+        height: job.video.height,
+        getOrCreatePreviewSessionMs: roundPreviewMs(performance.now() - timingStartMs)
+      })}`
+    );
+  }
+
+  if (!previewSessionState) {
+    throw new Error("Preview session was not created.");
   }
 
   return previewSessionState;
@@ -453,4 +520,44 @@ function getPreviewCueSummary(cues: LyricCue[], timeMs: number) {
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
+}
+
+function getPreviewSessionKey(
+  request: RenderPreviewRequest,
+  width = getPreviewSize(request.video?.width, request.video?.height).width,
+  height = getPreviewSize(request.video?.width, request.video?.height).height
+) {
+  return JSON.stringify({
+    audioPath: request.audioPath,
+    subtitlePath: request.subtitlePath,
+    scene: request.scene,
+    video: {
+      width,
+      height,
+      fps: request.video?.fps
+    }
+  });
+}
+
+function getPreviewVideoSettings(request: RenderPreviewRequest) {
+  const previewSize = getPreviewSize(request.video?.width, request.video?.height);
+  return {
+    ...request.video,
+    width: previewSize.width,
+    height: previewSize.height
+  };
+}
+
+function getPreviewSize(width = PREVIEW_MAX_WIDTH * 2, height = PREVIEW_MAX_HEIGHT * 2) {
+  const safeWidth = Math.max(1, width);
+  const safeHeight = Math.max(1, height);
+  const scale = Math.min(1, PREVIEW_MAX_WIDTH / safeWidth, PREVIEW_MAX_HEIGHT / safeHeight);
+  return {
+    width: Math.max(2, Math.round((safeWidth * scale) / 2) * 2),
+    height: Math.max(2, Math.round((safeHeight * scale) / 2) * 2)
+  };
+}
+
+function roundPreviewMs(value: number) {
+  return Number(value.toFixed(2));
 }
