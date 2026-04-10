@@ -39,6 +39,8 @@ describe("component caching", () => {
     });
     const cosmeticOptions = {
       ...baseOptions,
+      graphMode: "line" as const,
+      lineStyle: "area" as const,
       primaryColor: "#ff00ff",
       secondaryColor: "#00ff00",
       glowStrength: 15,

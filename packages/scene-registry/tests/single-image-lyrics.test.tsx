@@ -585,6 +585,14 @@ describe("scene registry components", () => {
     });
   });
 
+  it("exposes the new equalizer defaults", () => {
+    expect(equalizerComponent.defaultOptions).toMatchObject({
+      graphMode: "bars",
+      lineStyle: "stroke",
+      colorMode: "gradient"
+    });
+  });
+
   it("builds live DOM equalizer state with static layout and per-frame values", () => {
     const initialState = equalizerComponent.browserRuntime?.getInitialState?.({
       instance: {
@@ -745,5 +753,138 @@ describe("scene registry components", () => {
     expect(wrapper.style.bottom).toBe("0px");
     expect(wrapper.style.width).toBe("14%");
     expect(wrapper.style.height).toBe("56%");
+  });
+
+  it("builds live DOM equalizer line state with intensity colors", () => {
+    const initialState = equalizerComponent.browserRuntime?.getInitialState?.({
+      instance: {
+        id: "equalizer-line-1",
+        componentId: "equalizer",
+        componentName: "Equalizer",
+        enabled: true,
+        options: {}
+      },
+      options: {
+        ...equalizerComponent.defaultOptions,
+        graphMode: "line",
+        lineStyle: "area",
+        colorMode: "intensity",
+        barCount: 4
+      },
+      video: {
+        width: 1920,
+        height: 1080,
+        fps: 30,
+        durationMs: 2000,
+        durationInFrames: 60
+      },
+      lyrics: {
+        current: null,
+        next: null
+      },
+      assets: {
+        getUrl: vi.fn()
+      },
+      prepared: {
+        frames: [
+          [0, 0.25, 0.5, 1]
+        ]
+      }
+    });
+
+    const frameState = equalizerComponent.browserRuntime?.getFrameState?.({
+      instance: {
+        id: "equalizer-line-1",
+        componentId: "equalizer",
+        componentName: "Equalizer",
+        enabled: true,
+        options: {}
+      },
+      options: {
+        ...equalizerComponent.defaultOptions,
+        graphMode: "line",
+        lineStyle: "area",
+        colorMode: "intensity",
+        barCount: 4
+      },
+      frame: 0,
+      timeMs: 0,
+      video: {
+        width: 1920,
+        height: 1080,
+        fps: 30,
+        durationMs: 2000,
+        durationInFrames: 60
+      },
+      lyrics: {
+        current: null,
+        next: null
+      },
+      assets: {
+        getUrl: vi.fn()
+      },
+      prepared: {
+        frames: [
+          [0, 0.25, 0.5, 1]
+        ]
+      }
+    });
+
+    const equalizerInitialState = initialState as Record<string, unknown>;
+    const equalizerFrameState = frameState as Record<string, unknown>;
+
+    expect(equalizerInitialState).toMatchObject({
+      graphMode: "line",
+      lineStyle: "area",
+      baseline: "bottom"
+    });
+    expect(equalizerInitialState.values).toEqual([0, 0.25, 0.5, 1]);
+    expect(equalizerInitialState.colors).toEqual(["#7de2ff", "#3fc5f4", "#00a8e8", "#fde74c"]);
+    expect(equalizerFrameState.colors).toEqual(["#7de2ff", "#3fc5f4", "#00a8e8", "#fde74c"]);
+  });
+
+  it("renders the equalizer line graph with area fill", () => {
+    render(
+      equalizerComponent.Component({
+        instance: {
+          id: "equalizer-line-1",
+          componentId: "equalizer",
+          componentName: "Equalizer",
+          enabled: true,
+          options: {}
+        },
+        options: {
+          ...equalizerComponent.defaultOptions,
+          graphMode: "line",
+          lineStyle: "area",
+          colorMode: "intensity",
+          barCount: 4
+        },
+        frame: 0,
+        timeMs: 0,
+        video: {
+          width: 1920,
+          height: 1080,
+          fps: 30,
+          durationMs: 2000,
+          durationInFrames: 60
+        },
+        lyrics: createLyricRuntime([], 0),
+        assets: {
+          getUrl: vi.fn()
+        },
+        prepared: {
+          frames: [
+            [0, 0.25, 0.5, 1]
+          ]
+        }
+      })
+    );
+
+    const lineSvg = document.querySelector("[data-equalizer-line]");
+    expect(lineSvg).toBeTruthy();
+    expect(document.querySelectorAll("[data-equalizer-bar]")).toHaveLength(0);
+    expect(lineSvg?.querySelectorAll("path")).toHaveLength(2);
+    expect(lineSvg?.querySelectorAll("stop")).toHaveLength(4);
   });
 });

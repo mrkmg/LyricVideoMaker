@@ -18,8 +18,17 @@ type EqualizerAlignment = "start" | "center" | "end";
 type EqualizerLayoutMode = "single" | "mirrored" | "split";
 type EqualizerGrowthDirection = "up" | "down" | "left" | "right" | "outward";
 type EqualizerBandDistribution = "linear" | "log";
-type EqualizerColorMode = "solid" | "gradient" | "alternating";
+type EqualizerColorMode = "solid" | "gradient" | "intensity";
 type EqualizerCapStyle = "square" | "rounded";
+type EqualizerGraphMode = "bars" | "line";
+type EqualizerLineStyle = "stroke" | "area";
+type EqualizerLineBaseline =
+  | "top"
+  | "bottom"
+  | "left"
+  | "right"
+  | "center-horizontal"
+  | "center-vertical";
 
 export interface EqualizerOptions {
   placement: EqualizerPlacement;
@@ -29,6 +38,8 @@ export interface EqualizerOptions {
   offsetY: number;
   innerPadding: number;
   alignment: EqualizerAlignment;
+  graphMode: EqualizerGraphMode;
+  lineStyle: EqualizerLineStyle;
   barCount: number;
   barGap: number;
   cornerRadius: number;
@@ -102,6 +113,33 @@ const equalizerOptionsSchema: SceneOptionEntry[] = [
           { label: "Start", value: "start" },
           { label: "Center", value: "center" },
           { label: "End", value: "end" }
+        ]
+      }
+    ]
+  },
+  {
+    type: "category",
+    id: "graph",
+    label: "Graph",
+    options: [
+      {
+        type: "select",
+        id: "graphMode",
+        label: "Graph Mode",
+        defaultValue: "bars",
+        options: [
+          { label: "Bars", value: "bars" },
+          { label: "Line", value: "line" }
+        ]
+      },
+      {
+        type: "select",
+        id: "lineStyle",
+        label: "Line Style",
+        defaultValue: "stroke",
+        options: [
+          { label: "Stroke", value: "stroke" },
+          { label: "Area", value: "area" }
         ]
       }
     ]
@@ -182,7 +220,7 @@ const equalizerOptionsSchema: SceneOptionEntry[] = [
         options: [
           { label: "Solid", value: "solid" },
           { label: "Gradient", value: "gradient" },
-          { label: "Alternating", value: "alternating" }
+          { label: "Intensity", value: "intensity" }
         ]
       },
       { type: "color", id: "primaryColor", label: "Primary Color", defaultValue: "#7DE2FF" },
@@ -228,6 +266,8 @@ const equalizerDefaultOptions: EqualizerOptions = {
   offsetY: 0,
   innerPadding: 24,
   alignment: "center",
+  graphMode: "bars",
+  lineStyle: "stroke",
   barCount: 28,
   barGap: 6,
   cornerRadius: 999,
@@ -264,7 +304,7 @@ const equalizerDefaultOptions: EqualizerOptions = {
 const equalizerValidationDefinition: SceneComponentDefinition<EqualizerOptions> = {
   id: "equalizer",
   name: "Equalizer",
-  description: "Audio-reactive bar visualizer for overlay use.",
+  description: "Audio-reactive bar or line visualizer for overlay use.",
   staticWhenMarkupUnchanged: false,
   options: equalizerOptionsSchema,
   defaultOptions: equalizerDefaultOptions,
@@ -310,15 +350,17 @@ export const equalizerComponent: SceneComponentDefinition<EqualizerOptions> = {
   },
   browserRuntime: {
     runtimeId: "equalizer",
-    getInitialState({ options, prepared }) {
+    getInitialState({ instance, options, prepared }) {
       const preparedData = prepared as unknown as PreparedEqualizerData;
-      return createEqualizerBrowserInitialState(options, preparedData.frames?.[0] ?? []);
+      return createEqualizerBrowserInitialState(
+        instance.id,
+        options,
+        preparedData.frames?.[0] ?? []
+      );
     },
     getFrameState({ options, prepared, frame }) {
       const preparedData = prepared as unknown as PreparedEqualizerData;
-      return {
-        values: buildRenderableBarAmplitudes(preparedData.frames?.[frame] ?? [], options)
-      };
+      return createEqualizerBrowserFrameState(options, preparedData.frames?.[frame] ?? []);
     }
   },
   async prepare({ audio, options }) {
@@ -339,11 +381,11 @@ export const equalizerComponent: SceneComponentDefinition<EqualizerOptions> = {
       frames: spectrum.values
     } satisfies PreparedEqualizerData;
   },
-  Component: ({ frame, options, prepared }) => {
+  Component: ({ instance, frame, options, prepared }) => {
     const preparedData = prepared as unknown as PreparedEqualizerData;
     const frameValues = buildRenderableBars(preparedData.frames?.[frame] ?? [], options);
-    const staticValues = getEqualizerStaticValues(options, frameValues.length);
-    const barPlan = buildBarRenderPlan(frameValues, options.layoutMode);
+    const staticValues = getEqualizerStaticValues(instance.id, options, frameValues.length);
+    const colors = buildEqualizerColorPlan(frameValues, options);
 
     return (
       <div style={staticValues.layout.wrapperStyle}>
@@ -351,30 +393,52 @@ export const equalizerComponent: SceneComponentDefinition<EqualizerOptions> = {
           <div data-equalizer-plate="" style={staticValues.layout.plateStyle} />
         ) : null}
         <div data-equalizer-track="" style={staticValues.layout.trackStyle}>
-          {barPlan.map((entry, index) =>
-            entry.type === "gap" ? (
-              <div
-                key={`gap-${index}`}
-                style={staticValues.layout.isHorizontal
-                  ? { flex: `0 0 ${Math.max(12, options.barGap * 4)}px` }
-                  : { flex: `0 0 ${Math.max(12, options.barGap * 4)}px` }}
-              />
-            ) : (
-              <EqualizerBar
-                key={`bar-${index}`}
-                value={entry.value}
-                color={staticValues.colorPlan[entry.colorIndex] ?? options.primaryColor}
-                options={options}
-                isHorizontal={staticValues.layout.isHorizontal}
-                staticStyle={staticValues.barStyle}
-              />
-            )
+          {options.graphMode === "line" ? (
+            <EqualizerLineGraph
+              values={frameValues}
+              colors={colors}
+              options={options}
+              staticValues={staticValues}
+            />
+          ) : (
+            renderBarPlan(frameValues, colors, options, staticValues)
           )}
         </div>
       </div>
     );
   }
 };
+
+function renderBarPlan(
+  frameValues: number[],
+  colors: string[],
+  options: EqualizerOptions,
+  staticValues: EqualizerStaticValues
+) {
+  const barPlan = buildBarRenderPlan(frameValues, options.layoutMode);
+
+  return barPlan.map((entry, index) =>
+    entry.type === "gap" ? (
+      <div
+        key={`gap-${index}`}
+        style={
+          staticValues.layout.isHorizontal
+            ? { flex: `0 0 ${Math.max(12, options.barGap * 4)}px` }
+            : { flex: `0 0 ${Math.max(12, options.barGap * 4)}px` }
+        }
+      />
+    ) : (
+      <EqualizerBar
+        key={`bar-${index}`}
+        value={entry.value}
+        color={colors[entry.colorIndex] ?? options.primaryColor}
+        options={options}
+        isHorizontal={staticValues.layout.isHorizontal}
+        staticStyle={staticValues.barStyle}
+      />
+    )
+  );
+}
 
 function EqualizerBar({
   value,
@@ -491,6 +555,66 @@ function EqualizerBar({
   );
 }
 
+function EqualizerLineGraph({
+  values,
+  colors,
+  options,
+  staticValues
+}: {
+  values: number[];
+  colors: string[];
+  options: EqualizerOptions;
+  staticValues: EqualizerStaticValues;
+}) {
+  const geometry = buildLineGeometry(values, staticValues.layout.lineBaseline);
+
+  return (
+    <svg
+      data-equalizer-line=""
+      viewBox="0 0 100 100"
+      preserveAspectRatio="none"
+      style={staticValues.lineStyle.svgStyle}
+    >
+      <defs>
+        <linearGradient
+          id={staticValues.lineStyle.gradientId}
+          gradientUnits="userSpaceOnUse"
+          x1={geometry.gradientAxis.x1}
+          y1={geometry.gradientAxis.y1}
+          x2={geometry.gradientAxis.x2}
+          y2={geometry.gradientAxis.y2}
+        >
+          {buildGradientStops(colors).map((stop) => (
+            <stop key={stop.offset} offset={stop.offset} stopColor={stop.color} />
+          ))}
+        </linearGradient>
+      </defs>
+      {options.lineStyle === "area" ? (
+        <path
+          d={geometry.areaPath}
+          fill={`url(#${staticValues.lineStyle.gradientId})`}
+          opacity={staticValues.lineStyle.areaFillOpacity}
+          style={{
+            filter: staticValues.lineStyle.filter
+          }}
+        />
+      ) : null}
+      <path
+        d={geometry.linePath}
+        fill="none"
+        stroke={`url(#${staticValues.lineStyle.gradientId})`}
+        strokeWidth={staticValues.lineStyle.strokeWidth}
+        strokeLinecap={staticValues.lineStyle.strokeLinecap}
+        strokeLinejoin={staticValues.lineStyle.strokeLinecap === "round" ? "round" : "bevel"}
+        opacity={staticValues.barStyle.opacity}
+        style={{
+          filter: staticValues.lineStyle.filter
+        }}
+      />
+    </svg>
+  );
+}
+
 type BarPlanEntry = { type: "bar"; value: number; colorIndex: number } | { type: "gap" };
 
 function buildBarRenderPlan(
@@ -525,17 +649,44 @@ function buildRenderableBarAmplitudes(values: number[], options: EqualizerOption
 }
 
 function createEqualizerBrowserInitialState(
+  instanceId: string,
   options: EqualizerOptions,
   initialValues: number[]
 ) {
+  const staticValues = getEqualizerStaticValues(instanceId, options, initialValues.length);
+  const values = buildRenderableBars(initialValues, options);
+  const colors = buildEqualizerColorPlan(values, options);
+
+  if (options.graphMode === "line") {
+    const geometry = buildLineGeometry(values, staticValues.layout.lineBaseline);
+    return {
+      wrapperStyle: staticValues.layout.wrapperStyle,
+      trackStyle: staticValues.layout.trackStyle,
+      plateStyle: options.backgroundPlateEnabled ? staticValues.layout.plateStyle : null,
+      graphMode: options.graphMode,
+      baseline: staticValues.layout.lineBaseline,
+      lineStyle: options.lineStyle,
+      svgStyle: staticValues.lineStyle.svgStyle,
+      strokeWidth: staticValues.lineStyle.strokeWidth,
+      strokeLinecap: staticValues.lineStyle.strokeLinecap,
+      filter: staticValues.lineStyle.filter,
+      gradientId: staticValues.lineStyle.gradientId,
+      gradientAxis: geometry.gradientAxis,
+      areaFillOpacity: staticValues.lineStyle.areaFillOpacity,
+      opacity: staticValues.barStyle.opacity,
+      values,
+      colors
+    };
+  }
+
   const frameValues = buildRenderableBarAmplitudes(initialValues, options);
-  const staticValues = getEqualizerStaticValues(options, frameValues.length);
   const barPlan = buildBarRenderPlan(frameValues, options.layoutMode);
 
   return {
     wrapperStyle: staticValues.layout.wrapperStyle,
     trackStyle: staticValues.layout.trackStyle,
     plateStyle: options.backgroundPlateEnabled ? staticValues.layout.plateStyle : null,
+    graphMode: options.graphMode,
     isHorizontal: staticValues.layout.isHorizontal,
     layoutMode: options.layoutMode,
     growthDirection: options.growthDirection,
@@ -543,16 +694,30 @@ function createEqualizerBrowserInitialState(
     opacity: staticValues.barStyle.opacity,
     boxShadow: staticValues.barStyle.boxShadow,
     gapSize: Math.max(12, options.barGap * 4),
-    entries: barPlan.map((entry, index) =>
+    entries: barPlan.map((entry) =>
       entry.type === "gap"
         ? { type: "gap" as const }
         : {
             type: "bar" as const,
-            color: staticValues.colorPlan[entry.colorIndex] ?? options.primaryColor,
+            color: colors[entry.colorIndex] ?? options.primaryColor,
             value: entry.value
           }
     )
   };
+}
+
+function createEqualizerBrowserFrameState(options: EqualizerOptions, values: number[]) {
+  const renderableValues = buildRenderableBars(values, options);
+
+  return options.graphMode === "line"
+    ? {
+        values: renderableValues,
+        colors: buildEqualizerColorPlan(renderableValues, options)
+      }
+    : {
+        values: renderableValues.map((value) => getBarAmplitude(value, options)),
+        colors: buildEqualizerColorPlan(renderableValues, options)
+      };
 }
 
 interface EqualizerBarStaticStyle {
@@ -561,16 +726,30 @@ interface EqualizerBarStaticStyle {
   opacity: number;
 }
 
+interface EqualizerLineStaticStyle {
+  svgStyle: React.CSSProperties;
+  gradientId: string;
+  strokeWidth: number;
+  strokeLinecap: "butt" | "round";
+  filter: string;
+  areaFillOpacity: number;
+}
+
 interface EqualizerStaticValues {
   layout: ReturnType<typeof getEqualizerLayout>;
   barStyle: EqualizerBarStaticStyle;
-  colorPlan: string[];
+  lineStyle: EqualizerLineStaticStyle;
 }
 
 const equalizerStaticValueCache = new Map<string, EqualizerStaticValues>();
 
-function getEqualizerStaticValues(options: EqualizerOptions, barCount: number): EqualizerStaticValues {
+function getEqualizerStaticValues(
+  instanceId: string,
+  options: EqualizerOptions,
+  barCount: number
+): EqualizerStaticValues {
   const cacheKey = JSON.stringify({
+    instanceId,
     placement: options.placement,
     spanPercent: options.spanPercent,
     depthPercent: options.depthPercent,
@@ -578,6 +757,8 @@ function getEqualizerStaticValues(options: EqualizerOptions, barCount: number): 
     offsetY: options.offsetY,
     innerPadding: options.innerPadding,
     alignment: options.alignment,
+    graphMode: options.graphMode,
+    lineStyle: options.lineStyle,
     barGap: options.barGap,
     layoutMode: options.layoutMode,
     growthDirection: options.growthDirection,
@@ -611,7 +792,18 @@ function getEqualizerStaticValues(options: EqualizerOptions, barCount: number): 
       boxShadow: buildEqualizerShadowParts(options, layout.isHorizontal).join(", ") || "none",
       opacity: clamp01(options.opacity / 100)
     },
-    colorPlan: Array.from({ length: barCount }, (_, index) => getBarColor(index, barCount, options))
+    lineStyle: {
+      svgStyle: {
+        width: "100%",
+        height: "100%",
+        overflow: "visible"
+      },
+      gradientId: `equalizer-gradient-${instanceId.replace(/[^a-zA-Z0-9_-]/g, "-")}`,
+      strokeWidth: options.capStyle === "rounded" ? 3 : 2.5,
+      strokeLinecap: options.capStyle === "rounded" ? "round" : "butt",
+      filter: buildSvgFilter(buildEqualizerShadowParts(options, layout.isHorizontal)),
+      areaFillOpacity: clamp01(options.opacity / 100) * 0.35
+    }
   } satisfies EqualizerStaticValues;
   equalizerStaticValueCache.set(cacheKey, nextValue);
   return nextValue;
@@ -700,6 +892,10 @@ function buildEqualizerShadowParts(
   return shadowParts;
 }
 
+function buildSvgFilter(shadowParts: string[]) {
+  return shadowParts.length > 0 ? `drop-shadow(${shadowParts.join(") drop-shadow(")})` : "none";
+}
+
 function getEqualizerLayout(options: EqualizerOptions) {
   const isHorizontal = ![
     "left-center",
@@ -715,6 +911,7 @@ function getEqualizerLayout(options: EqualizerOptions) {
 
   return {
     isHorizontal,
+    lineBaseline: getLineBaseline(options.placement),
     wrapperStyle: {
       position: "absolute",
       ...anchor,
@@ -734,7 +931,7 @@ function getEqualizerLayout(options: EqualizerOptions) {
       position: "relative",
       display: "flex",
       flexDirection: isHorizontal ? "row" : "column",
-      gap: `${options.barGap}px`,
+      gap: `${options.graphMode === "line" ? 0 : options.barGap}px`,
       width: "100%",
       height: "100%",
       alignItems: "stretch",
@@ -837,14 +1034,36 @@ function getPlacementHeight(options: EqualizerOptions) {
   return `${options.spanPercent}%`;
 }
 
-function getBarColor(index: number, total: number, options: EqualizerOptions) {
+function getLineBaseline(placement: EqualizerPlacement): EqualizerLineBaseline {
+  switch (placement) {
+    case "top-center":
+    case "top-full":
+      return "top";
+    case "left-center":
+      return "left";
+    case "right-center":
+      return "right";
+    case "center-horizontal":
+      return "center-horizontal";
+    case "center-vertical":
+      return "center-vertical";
+    case "bottom-center":
+    case "bottom-full":
+    default:
+      return "bottom";
+  }
+}
+
+function buildEqualizerColorPlan(values: number[], options: EqualizerOptions) {
+  return values.map((value, index) => getBarColor(index, values.length, options, value));
+}
+
+function getBarColor(index: number, total: number, options: EqualizerOptions, amplitude: number) {
   switch (options.colorMode) {
     case "solid":
       return options.primaryColor;
-    case "alternating": {
-      const palette = [options.primaryColor, options.secondaryColor, options.accentColor];
-      return palette[index % palette.length];
-    }
+    case "intensity":
+      return getIntensityColor(amplitude, options);
     case "gradient":
     default: {
       const blend = total <= 1 ? 0 : index / (total - 1);
@@ -853,6 +1072,104 @@ function getBarColor(index: number, total: number, options: EqualizerOptions) {
         : mixHex(options.secondaryColor, options.accentColor, (blend - 0.5) * 2);
     }
   }
+}
+
+function getIntensityColor(amplitude: number, options: EqualizerOptions) {
+  const safeAmplitude = clamp01(amplitude);
+  return safeAmplitude <= 0.5
+    ? mixHex(options.primaryColor, options.secondaryColor, safeAmplitude * 2)
+    : mixHex(options.secondaryColor, options.accentColor, (safeAmplitude - 0.5) * 2);
+}
+
+function buildLineGeometry(values: number[], baseline: EqualizerLineBaseline) {
+  const safeValues = values.length > 0 ? values : [0];
+  const points = safeValues.map((value, index) => {
+    const progress = safeValues.length <= 1 ? 0.5 : index / (safeValues.length - 1);
+    const amplitude = clamp01(value);
+
+    switch (baseline) {
+      case "top":
+        return { x: progress * 100, y: amplitude * 100 };
+      case "left":
+        return { x: amplitude * 100, y: progress * 100 };
+      case "right":
+        return { x: 100 - amplitude * 100, y: progress * 100 };
+      case "center-horizontal":
+        return { x: progress * 100, y: 50 - amplitude * 50 };
+      case "center-vertical":
+        return { x: 50 + amplitude * 50, y: progress * 100 };
+      case "bottom":
+      default:
+        return { x: progress * 100, y: 100 - amplitude * 100 };
+    }
+  });
+
+  const linePath = pointsToPath(points);
+  const areaPath = buildAreaPath(points, baseline);
+
+  return {
+    points,
+    linePath,
+    areaPath,
+    gradientAxis: getLineGradientAxis(baseline)
+  };
+}
+
+function pointsToPath(points: Array<{ x: number; y: number }>) {
+  return points
+    .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(3)} ${point.y.toFixed(3)}`)
+    .join(" ");
+}
+
+function buildAreaPath(points: Array<{ x: number; y: number }>, baseline: EqualizerLineBaseline) {
+  const linePath = pointsToPath(points);
+  const firstPoint = points[0];
+  const lastPoint = points[points.length - 1];
+
+  switch (baseline) {
+    case "top":
+      return `${linePath} L ${lastPoint.x.toFixed(3)} 0 L ${firstPoint.x.toFixed(3)} 0 Z`;
+    case "left":
+      return `${linePath} L 0 ${lastPoint.y.toFixed(3)} L 0 ${firstPoint.y.toFixed(3)} Z`;
+    case "right":
+      return `${linePath} L 100 ${lastPoint.y.toFixed(3)} L 100 ${firstPoint.y.toFixed(3)} Z`;
+    case "center-horizontal":
+      return `${linePath} L ${lastPoint.x.toFixed(3)} 50 L ${firstPoint.x.toFixed(3)} 50 Z`;
+    case "center-vertical":
+      return `${linePath} L 50 ${lastPoint.y.toFixed(3)} L 50 ${firstPoint.y.toFixed(3)} Z`;
+    case "bottom":
+    default:
+      return `${linePath} L ${lastPoint.x.toFixed(3)} 100 L ${firstPoint.x.toFixed(3)} 100 Z`;
+  }
+}
+
+function getLineGradientAxis(baseline: EqualizerLineBaseline) {
+  if (baseline === "left" || baseline === "right" || baseline === "center-vertical") {
+    return {
+      x1: 0,
+      y1: 0,
+      x2: 0,
+      y2: 100
+    };
+  }
+
+  return {
+    x1: 0,
+    y1: 0,
+    x2: 100,
+    y2: 0
+  };
+}
+
+function buildGradientStops(colors: string[]) {
+  if (colors.length <= 1) {
+    return [{ offset: "0%", color: colors[0] ?? "#ffffff" }];
+  }
+
+  return colors.map((color, index) => ({
+    offset: `${(index / (colors.length - 1)) * 100}%`,
+    color
+  }));
 }
 
 function mixHex(left: string, right: string, blend: number) {
