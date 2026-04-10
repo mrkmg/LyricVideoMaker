@@ -29,7 +29,7 @@ textarea {
 button {
   border: 1px solid transparent;
   border-radius: 6px;
-  padding: 0.42rem 0.72rem;
+  padding: var(--button-padding-y) var(--button-padding-x);
   cursor: pointer;
   transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
 }

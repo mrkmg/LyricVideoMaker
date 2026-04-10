@@ -11,9 +11,9 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 0.75rem;
-  min-height: 44px;
-  padding: 0.55rem 0.8rem;
+  gap: var(--space-inline-md);
+  min-height: 38px;
+  padding: var(--space-panel-y) var(--space-panel-x);
   border-bottom: 1px solid var(--pane-border);
   background: rgba(255, 255, 255, 0.01);
 }
@@ -25,7 +25,7 @@
 }
 
 .panel-copy {
-  margin: 0.3rem 0 0;
+  margin: var(--space-stack-tight) 0 0;
   color: var(--text-muted);
   line-height: 1.3;
 }
@@ -43,7 +43,7 @@
 .field-label {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: var(--space-stack-sm);
   min-width: 0;
 }
 
@@ -88,16 +88,16 @@
 }
 
 .workspace-general-panel .panel-header {
-  padding: 0.5rem 0.7rem;
+  padding: var(--space-panel-y) var(--space-panel-x);
 }
 
 .workspace-general-panel .inspector-section-header {
   grid-template-columns: 1fr;
-  gap: 0.18rem;
+  gap: var(--space-stack-tight);
 }
 
 .workspace-general-panel .panel-copy {
-  margin-top: 0.35rem;
+  margin-top: var(--space-stack-tight);
   line-height: 1.35;
 }
 
@@ -112,7 +112,7 @@
 }
 
 .workspace-sidebar-badge {
-  padding: 0.18rem 0.5rem;
+  padding: 0.14rem 0.42rem;
   border-radius: 999px;
   background: rgba(142, 201, 255, 0.12);
   color: #bce3ff;
@@ -124,8 +124,8 @@
   overflow: hidden;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  gap: 0.6rem;
-  padding: 0.55rem 0;
+  gap: var(--space-stack-md);
+  padding: var(--space-panel-y) 0;
 }
 
 .workspace-nav-section {
@@ -133,12 +133,12 @@
   overflow: hidden;
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto;
-  gap: 0.45rem;
+  gap: var(--space-stack-sm);
   height: 100%;
 }
 
 .workspace-nav-section-label {
-  padding: 0 0.8rem;
+  padding: 0 var(--space-panel-x);
   text-transform: uppercase;
   letter-spacing: 0.16em;
   font-size: 0.65rem;
@@ -149,14 +149,14 @@
 .workspace-component-select {
   width: 100%;
   text-align: left;
-  padding: 0.55rem 0.7rem;
+  padding: 0.4rem var(--space-panel-x);
   border-radius: 0;
-  border-width: 0 0 1px;
+  border-width: 0;
   border-style: solid;
   border-color: var(--pane-border);
   background: transparent;
   display: grid;
-  gap: 0.1rem;
+  gap: 0.05rem;
   color: inherit;
 }
 
@@ -183,6 +183,7 @@
   overflow: auto;
   display: grid;
   align-content: start;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
 }
 
 .workspace-component-row {
@@ -195,7 +196,7 @@
 .workspace-component-copy {
   min-width: 0;
   display: grid;
-  gap: 0.15rem;
+  gap: 0.08rem;
 }
 
 .workspace-component-header {
@@ -203,7 +204,7 @@
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  gap: 0.45rem;
+  gap: var(--space-inline-sm);
 }
 
 .workspace-component-order {
@@ -220,9 +221,9 @@
 .workspace-component-actions {
   display: grid;
   grid-template-columns: repeat(3, auto);
-  gap: 0.25rem;
+  gap: 0.2rem;
   align-content: center;
-  padding: 0.45rem 0.65rem 0.45rem 0.3rem;
+  padding: 0.3rem 0.55rem 0.3rem 0.2rem;
 }
 
 .workspace-component-row .workspace-component-select {
@@ -232,14 +233,14 @@
 .workspace-add-component {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 0.35rem;
+  gap: var(--space-stack-sm);
   align-items: end;
-  padding: 0 0.7rem 0.7rem;
+  padding: 0 var(--space-panel-x) var(--space-panel-y);
   border-top: 1px solid var(--pane-border);
 }
 
 .workspace-compact-field {
-  gap: 0.45rem;
+  gap: var(--space-stack-sm);
 }
 
 .workspace-add-button {
@@ -247,8 +248,8 @@
 }
 
 .workspace-empty-state {
-  margin: 0 0.8rem;
-  padding: 0.55rem 0;
+  margin: 0 var(--space-panel-x);
+  padding: var(--space-panel-y) 0;
   color: var(--text-muted);
 }
 
@@ -264,20 +265,19 @@
 
 .inspector-section {
   display: grid;
-  gap: 0.5rem;
-  padding: 0.65rem 0.8rem;
-  border-top: 1px solid var(--pane-border);
+  gap: var(--space-stack-md);
+  padding: var(--space-section-y) var(--space-section-x);
 }
 
-.inspector-layout > .inspector-section:first-child {
-  border-top: 0;
+.inspector-layout > .inspector-section + .inspector-section {
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .inspector-section-header {
   display: grid;
   grid-template-columns: 1fr;
   align-items: baseline;
-  gap: 0.2rem;
+  gap: var(--space-stack-tight);
 }
 
 .inspector-section-header h3 {
@@ -301,13 +301,13 @@
 
 .inspector-grid {
   display: grid;
-  gap: 0.5rem;
+  gap: var(--space-stack-md);
 }
 
 .general-video-grid {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 0.45rem 0.5rem;
+  gap: var(--space-stack-sm) var(--space-stack-md);
 }
 
 .general-files-grid.inspector-grid-three,
@@ -331,7 +331,7 @@
 
 .general-render-section {
   align-items: start;
-  gap: 0.45rem 0.75rem;
+  gap: var(--space-stack-sm) var(--space-inline-md);
 }
 
 .general-render-section .error-banner {
@@ -339,22 +339,22 @@
 }
 
 .workspace-general-panel .inspector-section {
-  gap: 0.45rem;
-  padding: 0.65rem 0.75rem;
+  gap: var(--space-stack-sm);
+  padding: var(--space-section-y) var(--space-section-x);
 }
 
 .workspace-general-panel .field {
-  gap: 0.2rem;
+  gap: var(--space-stack-tight);
 }
 
 .workspace-general-panel .field input,
 .workspace-general-panel .field select,
 .workspace-general-panel .file-pill {
-  padding: 0.34rem 0.52rem;
+  padding: 0.26rem 0.45rem;
 }
 
 .workspace-general-panel .file-pill {
-  min-height: 28px;
+  min-height: var(--control-height-compact);
 }
 
 .workspace-general-panel .render-action-row {
@@ -381,7 +381,7 @@
 .scene-status-card,
 .component-chip {
   display: grid;
-  gap: 0.1rem;
+  gap: 0.08rem;
   padding: 0.1rem 0;
   background: transparent;
   border: 0;
@@ -397,11 +397,11 @@
 .component-chip-list {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.55rem;
+  gap: var(--space-stack-md);
 }
 
 .component-chip {
-  padding-top: 0.45rem;
+  padding-top: var(--space-stack-sm);
   border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
@@ -510,8 +510,8 @@
 .preview-jump-rail {
   display: grid;
   align-content: center;
-  gap: 0.3rem;
-  padding: 0.45rem;
+  gap: var(--space-stack-sm);
+  padding: var(--space-stack-sm);
   border-left: 1px solid var(--pane-border);
   background: rgba(255, 255, 255, 0.015);
 }
@@ -523,8 +523,8 @@
 
 .preview-controls {
   display: grid;
-  gap: 0.3rem;
-  padding: 0.45rem 0.7rem 0.55rem;
+  gap: var(--space-stack-sm);
+  padding: var(--space-stack-sm) var(--space-panel-x) var(--space-panel-y);
   border-top: 1px solid var(--pane-border);
 }
 
@@ -536,11 +536,12 @@
 .option-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.5rem 0.7rem;
+  gap: var(--space-stack-md) var(--space-inline-md);
 }
 
 .option-category {
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: grid;
+  gap: var(--space-stack-sm);
 }
 
 .option-category-toggle {
@@ -550,7 +551,7 @@
   justify-content: space-between;
   border-radius: 0;
   border: 0;
-  padding: 0.45rem 0;
+  padding: 0.05rem 0 0;
   background: transparent;
   color: #f5f8ff;
   font-weight: 700;
@@ -563,13 +564,13 @@
 }
 
 .option-category .option-list {
-  padding: 0 0 0.25rem;
+  padding: 0;
 }
 
 .option-row {
   display: grid;
-  grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
-  gap: 0.55rem;
+  grid-template-columns: minmax(156px, 210px) minmax(0, 1fr);
+  gap: var(--space-inline-md);
   align-items: center;
 }
 
@@ -587,7 +588,7 @@
 
 .file-picker-input {
   display: grid;
-  gap: 0.3rem;
+  gap: var(--space-stack-sm);
 }
 
 .progress-track {
@@ -656,7 +657,7 @@
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(12, 18, 28, 0.98);
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.42);
-  padding: 0.7rem;
+  padding: 0.6rem;
 }
 
 .subtitle-dialog-card {
@@ -664,16 +665,26 @@
 }
 
 .subtitle-dialog-body {
-  gap: 0.75rem;
+  gap: var(--space-stack-lg);
 }
 
-.subtitle-generator-field {
-  justify-content: end;
+.subtitle-field {
+  align-content: start;
+}
+
+.subtitle-field-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-stack-sm);
+}
+
+.subtitle-field-actions > button {
+  min-width: 0;
 }
 
 .dialog-body {
   display: grid;
-  gap: 0.5rem;
+  gap: var(--space-stack-md);
 }
 
 .dialog-progress-track {
@@ -683,7 +694,7 @@
 .dialog-actions {
   display: flex;
   justify-content: flex-end;
-  margin-top: 0.6rem;
+  margin-top: var(--space-stack-md);
 }
 
 @media (max-width: 1280px) {
@@ -751,6 +762,10 @@
   }
 
   .file-field-compact {
+    grid-template-columns: 1fr;
+  }
+
+  .subtitle-field-actions {
     grid-template-columns: 1fr;
   }
 

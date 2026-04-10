@@ -69,27 +69,31 @@ export function GeneralDetailsEditor({
                 compact
                 onPick={() => onPickPath("audio")}
               />
-              <FileField
-                label="Lyric subtitles"
-                helpText="Select the SRT subtitle file that times the lyrics."
-                value={composer.subtitlePath}
-                buttonLabel="Pick SRT"
-                compact
-                onPick={() => onPickPath("subtitle")}
-              />
-              <div className="field file-field file-field-compact subtitle-generator-field">
-                <span className="field-label">Automatic subtitles</span>
-                <div className="file-pill is-empty">
-                  Generate a reusable SRT from audio or align a lyrics TXT file.
-                </div>
-                <button
-                  type="button"
-                  className="secondary"
-                  disabled={!composer.audioPath || isSubmitting || hasActiveRender}
-                  onClick={onOpenSubtitleGenerator}
+              <div className="field file-field file-field-compact subtitle-field">
+                <span className="field-label">Lyric subtitles</span>
+                <div
+                  className={`file-pill${composer.subtitlePath.trim() ? "" : " is-empty"}`}
+                  title={composer.subtitlePath.trim() ? composer.subtitlePath : "Not selected"}
                 >
-                  Generate SRT
-                </button>
+                  {composer.subtitlePath || "Not selected"}
+                </div>
+                <div className="subtitle-field-actions">
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => onPickPath("subtitle")}
+                  >
+                    Pick SRT
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={!composer.audioPath || isSubmitting || hasActiveRender}
+                    onClick={onOpenSubtitleGenerator}
+                  >
+                    Generate SRT
+                  </button>
+                </div>
               </div>
               <FileField
                 label="Output MP4"

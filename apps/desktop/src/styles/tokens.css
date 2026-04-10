@@ -18,4 +18,20 @@
   --accent: #8ec9ff;
   --accent-strong: #5ca3ff;
   --danger: #ff8080;
+  --space-panel-x: 0.7rem;
+  --space-panel-y: 0.46rem;
+  --space-section-x: 0.7rem;
+  --space-section-y: 0.52rem;
+  --space-stack-tight: 0.16rem;
+  --space-stack-sm: 0.28rem;
+  --space-stack-md: 0.4rem;
+  --space-stack-lg: 0.55rem;
+  --space-inline-sm: 0.4rem;
+  --space-inline-md: 0.55rem;
+  --control-height: 28px;
+  --control-height-compact: 26px;
+  --control-padding-y: 0.28rem;
+  --control-padding-x: 0.48rem;
+  --button-padding-y: 0.34rem;
+  --button-padding-x: 0.6rem;
 }
