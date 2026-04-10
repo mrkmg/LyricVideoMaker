@@ -4,6 +4,7 @@ import { spawn } from "node:child_process";
 import { availableParallelism } from "node:os";
 import { performance } from "node:perf_hooks";
 import { join } from "node:path";
+import type { Writable } from "node:stream";
 import ffmpegPath from "ffmpeg-static";
 import ffprobe from "ffprobe-static";
 import type { Browser, BrowserContext, CDPSession, Page, Route } from "playwright";
@@ -91,8 +92,24 @@ interface OrderedFrameWriteQueue {
   abort(): Promise<void>;
 }
 
+interface FramePreviewWorkerHandle {
+  current: FramePreviewSession;
+}
+
 interface ProgressEmitter {
   emit(event: RenderProgressEvent): void;
+}
+
+interface MuxPipelineDiagnostics {
+  orderedPendingFrames: number;
+  orderedNextFrameToWrite: number;
+  orderedLastFlushedFrame: number;
+  frameQueueBufferedFrames: number;
+  frameQueueLastCompletedFrame: number;
+  ffmpegFramesWritten: number;
+  ffmpegLastWriteStartedAtMs: number;
+  ffmpegLastWriteCompletedAtMs: number;
+  ffmpegPid: number | undefined;
 }
 
 export interface RenderLogger {
@@ -114,6 +131,12 @@ const ASSET_URL_PREFIX = "http://lyric-video.local/assets/";
 const PROGRESS_INTERVAL_MS = 250;
 const FFMPEG_EXECUTABLE = resolveExecutablePath(ffmpegPath, "ffmpeg");
 const FFPROBE_EXECUTABLE = resolveExecutablePath(ffprobe.path, "ffprobe");
+const MUX_WRITE_TIMEOUT_MS =
+  normalizePositiveInteger(process.env.LYRIC_VIDEO_FFMPEG_WRITE_TIMEOUT_MS) ?? 15000;
+const FRAME_STAGE_TIMEOUT_MS =
+  normalizePositiveInteger(process.env.LYRIC_VIDEO_FRAME_STAGE_TIMEOUT_MS) ?? 15000;
+const WORKER_FRAME_RETRY_LIMIT =
+  normalizePositiveInteger(process.env.LYRIC_VIDEO_WORKER_FRAME_RETRY_LIMIT) ?? 2;
 
 const NOOP_PROGRESS_EMITTER: ProgressEmitter = {
   emit() {}
@@ -168,7 +191,8 @@ export async function renderLyricVideo({
   let orderedFrameQueue: OrderedFrameWriteQueue | null = null;
   let muxerFinished = false;
   let workerFailure: unknown = null;
-  const workerSessions: FramePreviewSession[] = [];
+  const workerHandles: FramePreviewWorkerHandle[] = [];
+  const muxDiagnostics = createMuxPipelineDiagnostics();
   try {
     throwIfAborted(renderSignal);
 
@@ -233,8 +257,8 @@ export async function renderLyricVideo({
     }
 
     for (let workerIndex = 0; workerIndex < workerCount; workerIndex += 1) {
-      workerSessions.push(
-        await createLiveDomRenderSession({
+      workerHandles.push({
+        current: await createLiveDomRenderSession({
           sessionLabel: `worker-${workerIndex}`,
           preferBeginFrame: useBeginFrame,
           job,
@@ -248,20 +272,24 @@ export async function renderLyricVideo({
           logger,
           profiler
         })
-      );
+      });
     }
 
-    muxer = startFrameMuxer(job, renderSignal, logger);
+    muxer = startFrameMuxer(job, renderSignal, logger, muxDiagnostics);
     frameQueue = createFrameWriteQueue({
       muxer,
       profiler,
-      signal: renderSignal
+      signal: renderSignal,
+      diagnostics: muxDiagnostics,
+      logger
     });
     orderedFrameQueue = createOrderedFrameWriteQueue({
       totalFrames: job.video.durationInFrames,
       frameQueue,
       signal: renderSignal,
       profiler,
+      diagnostics: muxDiagnostics,
+      logger,
       maxPendingFrames: Math.max(4, workerCount * 2)
     });
     const renderStartMs = performance.now();
@@ -293,14 +321,30 @@ export async function renderLyricVideo({
     };
 
     await Promise.all(
-      workerSessions.map((worker, workerIndex) =>
+      workerHandles.map((workerHandle, workerIndex) =>
         renderWorkerFrames({
-          worker,
+          workerHandle,
           workerIndex,
           workerCount,
           totalFrames: job.video.durationInFrames,
           orderedFrameQueue: orderedFrameQueue!,
+          createWorkerSession: async () =>
+            await createLiveDomRenderSession({
+              sessionLabel: `worker-${workerIndex}`,
+              preferBeginFrame: useBeginFrame,
+              job,
+              componentLookup,
+              components: enabledComponents,
+              assets,
+              preloadedAssets,
+              prepared,
+              scenePayload,
+              signal: renderSignal,
+              logger,
+              profiler
+            }),
           signal: renderSignal,
+          logger,
           abort: () => {
             if (!renderController.signal.aborted) {
               renderController.abort();
@@ -381,7 +425,7 @@ export async function renderLyricVideo({
       await muxer.abort();
     }
 
-    await Promise.allSettled(workerSessions.map((worker) => worker.dispose()));
+    await Promise.allSettled(workerHandles.map((workerHandle) => workerHandle.current.dispose()));
     signal?.removeEventListener("abort", forwardAbort);
 
     logRenderProfile(profiler, job, logger);
@@ -537,21 +581,37 @@ async function createLiveDomRenderSession({
       );
 
       traceRenderStep(logger, sessionLabel, safeFrame, "browser-update-start");
-      await maybeMeasureAsync(profiler, "browserUpdate", async () => {
-        await updateLiveDomScene(page!, framePayload);
-      });
+      await withTimeout(
+        maybeMeasureAsync(profiler, "browserUpdate", async () => {
+          await updateLiveDomScene(page!, framePayload);
+        }),
+        createFrameStageTimeoutError({
+          sessionLabel,
+          frame: safeFrame,
+          stage: "browser update"
+        }),
+        FRAME_STAGE_TIMEOUT_MS
+      );
       traceRenderStep(logger, sessionLabel, safeFrame, "browser-update-done");
 
       traceRenderStep(logger, sessionLabel, safeFrame, "capture-start");
-      const capture = await maybeMeasureAsync(profiler, "capture", async () => {
-        return await captureFrameBuffer({
-          cdpSession: cdpSession!,
-          fps: job.video.fps,
-          preferBeginFrame,
-          logger,
-          beginFrameFallbackLogged
-        });
-      });
+      const capture = await withTimeout(
+        maybeMeasureAsync(profiler, "capture", async () => {
+          return await captureFrameBuffer({
+            cdpSession: cdpSession!,
+            fps: job.video.fps,
+            preferBeginFrame,
+            logger,
+            beginFrameFallbackLogged
+          });
+        }),
+        createFrameStageTimeoutError({
+          sessionLabel,
+          frame: safeFrame,
+          stage: "capture"
+        }),
+        FRAME_STAGE_TIMEOUT_MS
+      );
       traceRenderStep(logger, sessionLabel, safeFrame, "capture-done");
       beginFrameFallbackLogged = capture.beginFrameFallbackLogged;
 
@@ -815,12 +875,16 @@ export function createOrderedFrameWriteQueue({
   frameQueue,
   signal,
   profiler,
+  diagnostics,
+  logger,
   maxPendingFrames = 4
 }: {
   totalFrames: number;
   frameQueue: FrameWriteQueue;
   signal?: AbortSignal;
   profiler?: RenderProfiler;
+  diagnostics?: MuxPipelineDiagnostics;
+  logger?: RenderLogger;
   maxPendingFrames?: number;
 }): OrderedFrameWriteQueue {
   let nextFrameToWrite = 0;
@@ -843,6 +907,7 @@ export function createOrderedFrameWriteQueue({
 
       const waitStartMs = profiler?.enabled ? performance.now() : 0;
       while (pendingFrames.size >= maxPendingFrames && frame.frame !== nextFrameToWrite) {
+        traceMuxState(logger, diagnostics, "ordered-queue-waiting-for-space");
         await new Promise<void>((resolve) => {
           spaceResolvers.push(resolve);
         });
@@ -861,6 +926,9 @@ export function createOrderedFrameWriteQueue({
       }
 
       pendingFrames.set(frame.frame, frame.buffer);
+      if (diagnostics) {
+        diagnostics.orderedPendingFrames = pendingFrames.size;
+      }
       scheduleFlush();
 
       return nextFrameToWrite;
@@ -901,12 +969,25 @@ export function createOrderedFrameWriteQueue({
 
   async function flushPendingFrames() {
     while (pendingFrames.has(nextFrameToWrite)) {
+      if (diagnostics) {
+        diagnostics.orderedNextFrameToWrite = nextFrameToWrite;
+      }
       const nextFrame = pendingFrames.get(nextFrameToWrite);
       pendingFrames.delete(nextFrameToWrite);
+      if (diagnostics) {
+        diagnostics.orderedPendingFrames = pendingFrames.size;
+      }
       releaseSpaceResolvers();
 
       await frameQueue.enqueue(nextFrame!);
+      if (diagnostics) {
+        diagnostics.orderedLastFlushedFrame = nextFrameToWrite;
+      }
       nextFrameToWrite += 1;
+      if (diagnostics) {
+        diagnostics.orderedNextFrameToWrite = nextFrameToWrite;
+      }
+      releaseSpaceResolvers();
     }
   }
 
@@ -1106,23 +1187,111 @@ function traceRenderStep(
   logger.info(`[trace:${sessionLabel}] frame=${frame} step=${step}`);
 }
 
+function createMuxPipelineDiagnostics(): MuxPipelineDiagnostics {
+  const nowMs = Date.now();
+  return {
+    orderedPendingFrames: 0,
+    orderedNextFrameToWrite: 0,
+    orderedLastFlushedFrame: -1,
+    frameQueueBufferedFrames: 0,
+    frameQueueLastCompletedFrame: -1,
+    ffmpegFramesWritten: 0,
+    ffmpegLastWriteStartedAtMs: nowMs,
+    ffmpegLastWriteCompletedAtMs: nowMs,
+    ffmpegPid: undefined
+  };
+}
+
+function traceMuxState(
+  logger: RenderLogger | undefined,
+  diagnostics: MuxPipelineDiagnostics | undefined,
+  reason: string
+) {
+  if (!logger || process.env.LYRIC_VIDEO_RENDER_MUX_TRACE !== "1") {
+    return;
+  }
+
+  logger.info(`[mux-trace:${reason}] ${formatMuxDiagnostics(diagnostics)}`);
+}
+
+function formatMuxDiagnostics(diagnostics: MuxPipelineDiagnostics | undefined) {
+  if (!diagnostics) {
+    return "mux diagnostics unavailable.";
+  }
+
+  const nowMs = Date.now();
+  const elapsedSinceLastWriteMs = Math.max(0, nowMs - diagnostics.ffmpegLastWriteCompletedAtMs);
+  return [
+    `orderedPending=${diagnostics.orderedPendingFrames}`,
+    `nextExpected=${diagnostics.orderedNextFrameToWrite}`,
+    `lastFlushed=${diagnostics.orderedLastFlushedFrame}`,
+    `frameQueueBuffered=${diagnostics.frameQueueBufferedFrames}`,
+    `lastFrameCompleted=${diagnostics.frameQueueLastCompletedFrame}`,
+    `ffmpegFramesWritten=${diagnostics.ffmpegFramesWritten}`,
+    `ffmpegPid=${diagnostics.ffmpegPid ?? "unknown"}`,
+    `lastWriteAgeMs=${elapsedSinceLastWriteMs}`
+  ].join(" ");
+}
+
+function createFrameStageTimeoutError({
+  sessionLabel,
+  frame,
+  stage
+}: {
+  sessionLabel: string;
+  frame: number;
+  stage: string;
+}) {
+  return new Error(
+    `Chromium session ${sessionLabel} timed out during ${stage} for frame ${frame} after ${FRAME_STAGE_TIMEOUT_MS}ms.`
+  );
+}
+
+async function withTimeout<T>(
+  operation: Promise<T>,
+  timeoutError: Error,
+  timeoutMs: number
+) {
+  let timer: NodeJS.Timeout | undefined;
+  void operation.catch(() => {});
+
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<T>((_resolve, reject) => {
+        timer = setTimeout(() => {
+          reject(timeoutError);
+        }, timeoutMs);
+      })
+    ]);
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
+}
+
 async function renderWorkerFrames({
-  worker,
+  workerHandle,
   workerIndex,
   workerCount,
   totalFrames,
   orderedFrameQueue,
+  createWorkerSession,
   signal,
+  logger,
   abort,
   onError,
   onFramesWritten
 }: {
-  worker: FramePreviewSession;
+  workerHandle: FramePreviewWorkerHandle;
   workerIndex: number;
   workerCount: number;
   totalFrames: number;
   orderedFrameQueue: OrderedFrameWriteQueue;
+  createWorkerSession: () => Promise<FramePreviewSession>;
   signal?: AbortSignal;
+  logger: RenderLogger;
   abort: () => void;
   onError: (error: unknown) => void;
   onFramesWritten: (framesWritten: number) => void;
@@ -1130,7 +1299,14 @@ async function renderWorkerFrames({
   try {
     for (let frame = workerIndex; frame < totalFrames; frame += workerCount) {
       throwIfAborted(signal);
-      const renderedFrame = await worker.renderFrame({ frame });
+      const renderedFrame = await renderFrameWithWorkerRecovery({
+        workerHandle,
+        frame,
+        workerIndex,
+        createWorkerSession,
+        logger,
+        signal
+      });
       const framesWritten = await orderedFrameQueue.enqueue({
         frame: renderedFrame.frame,
         buffer: renderedFrame.png
@@ -1144,6 +1320,71 @@ async function renderWorkerFrames({
     abort();
     throw error;
   }
+}
+
+export async function renderFrameWithWorkerRecovery({
+  workerHandle,
+  frame,
+  workerIndex,
+  createWorkerSession,
+  logger,
+  signal,
+  retryLimit = WORKER_FRAME_RETRY_LIMIT
+}: {
+  workerHandle: FramePreviewWorkerHandle;
+  frame: number;
+  workerIndex: number;
+  createWorkerSession: () => Promise<FramePreviewSession>;
+  logger: RenderLogger;
+  signal?: AbortSignal;
+  retryLimit?: number;
+}) {
+  let attempt = 0;
+
+  while (true) {
+    throwIfAborted(signal);
+    try {
+      return await workerHandle.current.renderFrame({ frame });
+    } catch (error) {
+      attempt += 1;
+      if (!isRecoverableWorkerRenderError(error) || attempt >= retryLimit) {
+        throw error;
+      }
+
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.warn(
+        `Worker ${workerIndex} hit a recoverable frame render failure at frame ${frame}; restarting Chromium session (${attempt}/${retryLimit - 1} retries). ${errorMessage}`
+      );
+      await disposeWorkerSession(workerHandle.current, logger, workerIndex);
+      workerHandle.current = await createWorkerSession();
+    }
+  }
+}
+
+async function disposeWorkerSession(
+  worker: FramePreviewSession,
+  logger: RenderLogger,
+  workerIndex: number
+) {
+  try {
+    await worker.dispose();
+  } catch (error) {
+    logger.warn(
+      `Worker ${workerIndex} Chromium session disposal failed during recovery. ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+}
+
+function isRecoverableWorkerRenderError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return (
+    error.message.includes("timed out during") ||
+    error.message.includes("Target page, context or browser has been closed") ||
+    error.message.includes("Browser has been closed")
+  );
 }
 
 function createProgressEmitter(onProgress: RenderLyricVideoInput["onProgress"]): ProgressEmitter {
@@ -1364,11 +1605,15 @@ function createFrameWriteQueue({
   muxer,
   profiler,
   signal,
+  diagnostics,
+  logger,
   maxBufferedFrames = 3
 }: {
   muxer: FrameMuxer;
   profiler: RenderProfiler;
   signal?: AbortSignal;
+  diagnostics?: MuxPipelineDiagnostics;
+  logger?: RenderLogger;
   maxBufferedFrames?: number;
 }): FrameWriteQueue {
   let bufferedFrames = 0;
@@ -1385,6 +1630,7 @@ function createFrameWriteQueue({
 
       const waitStartMs = profiler.enabled ? performance.now() : 0;
       while (bufferedFrames >= maxBufferedFrames) {
+        traceMuxState(logger, diagnostics, "frame-queue-waiting-for-space");
         await new Promise<void>((resolve) => {
           spaceResolvers.push(resolve);
         });
@@ -1399,6 +1645,9 @@ function createFrameWriteQueue({
       }
 
       bufferedFrames += 1;
+      if (diagnostics) {
+        diagnostics.frameQueueBufferedFrames = bufferedFrames;
+      }
       const pendingWrite = writeChain.then(async () => {
         await measureAsync(profiler, "muxWrite", async () => {
           await muxer.writeFrame(frame);
@@ -1410,6 +1659,10 @@ function createFrameWriteQueue({
         })
         .finally(() => {
           bufferedFrames = Math.max(0, bufferedFrames - 1);
+          if (diagnostics) {
+            diagnostics.frameQueueBufferedFrames = bufferedFrames;
+            diagnostics.frameQueueLastCompletedFrame = diagnostics.ffmpegFramesWritten;
+          }
           const resolvers = spaceResolvers;
           spaceResolvers = [];
           for (const resolve of resolvers) {
@@ -1427,6 +1680,9 @@ function createFrameWriteQueue({
     async abort() {
       const resolvers = spaceResolvers;
       spaceResolvers = [];
+      if (diagnostics) {
+        diagnostics.frameQueueBufferedFrames = 0;
+      }
       for (const resolve of resolvers) {
         resolve();
       }
@@ -1435,10 +1691,126 @@ function createFrameWriteQueue({
   };
 }
 
+export async function writeFrameToMuxerInput({
+  stdin,
+  frame,
+  logger,
+  diagnostics,
+  exitPromise,
+  timeoutMs
+}: {
+  stdin: Writable;
+  frame: Buffer;
+  logger: RenderLogger;
+  diagnostics?: MuxPipelineDiagnostics;
+  exitPromise?: Promise<void>;
+  timeoutMs: number;
+}) {
+  const writeStartedAtMs = Date.now();
+  if (diagnostics) {
+    diagnostics.ffmpegLastWriteStartedAtMs = writeStartedAtMs;
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    let settled = false;
+    let writeCallbackCompleted = false;
+    let drainCompleted = false;
+    let timeoutId: NodeJS.Timeout | undefined;
+
+    const finishIfReady = () => {
+      if (settled || !writeCallbackCompleted || !drainCompleted) {
+        return;
+      }
+
+      settled = true;
+      cleanup();
+      if (diagnostics) {
+        diagnostics.ffmpegFramesWritten += 1;
+        diagnostics.ffmpegLastWriteCompletedAtMs = Date.now();
+      }
+      resolve();
+    };
+
+    const fail = (error: Error) => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      cleanup();
+      reject(error);
+    };
+
+    const cleanup = () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+      stdin.off("drain", handleDrain);
+      stdin.off("error", handleError);
+      stdin.off("close", handleClose);
+    };
+
+    const handleDrain = () => {
+      drainCompleted = true;
+      finishIfReady();
+    };
+
+    const handleError = (error: Error) => {
+      fail(error);
+    };
+
+    const handleClose = () => {
+      fail(new Error("ffmpeg stdin closed before a frame write completed."));
+    };
+
+    stdin.on("error", handleError);
+    stdin.on("close", handleClose);
+
+    if (exitPromise) {
+      void exitPromise.catch((error) => {
+        const exitError = error instanceof Error ? error : new Error(String(error));
+        fail(exitError);
+      });
+    }
+
+    timeoutId = setTimeout(() => {
+      const elapsedMs = Date.now() - writeStartedAtMs;
+      logger.error(
+        `ffmpeg stdin write stalled for ${elapsedMs}ms. ${formatMuxDiagnostics(diagnostics)}`
+      );
+      fail(
+        new Error(
+          `ffmpeg stdin write timed out after ${elapsedMs}ms. ${formatMuxDiagnostics(diagnostics)}`
+        )
+      );
+    }, timeoutMs);
+
+    const accepted = stdin.write(frame, (error) => {
+      if (error) {
+        fail(error);
+        return;
+      }
+
+      writeCallbackCompleted = true;
+      finishIfReady();
+    });
+
+    if (accepted) {
+      drainCompleted = true;
+      finishIfReady();
+      return;
+    }
+
+    traceMuxState(logger, diagnostics, "ffmpeg-stdin-backpressure");
+    stdin.once("drain", handleDrain);
+  });
+}
+
 function startFrameMuxer(
   job: RenderJob,
   signal: AbortSignal | undefined,
-  logger: RenderLogger
+  logger: RenderLogger,
+  diagnostics?: MuxPipelineDiagnostics
 ): FrameMuxer {
   let aborted = false;
   let finished = false;
@@ -1473,6 +1845,9 @@ function startFrameMuxer(
     }
   );
 
+  if (diagnostics) {
+    diagnostics.ffmpegPid = child.pid;
+  }
   logger.info("Spawned ffmpeg muxer process.");
 
   const stderr: Buffer[] = [];
@@ -1512,23 +1887,13 @@ function startFrameMuxer(
       }
 
       throwIfAborted(signal);
-
-      await new Promise<void>((resolve, reject) => {
-        const handleError = (error: Error) => {
-          child.stdin.off("error", handleError);
-          reject(error);
-        };
-
-        child.stdin.once("error", handleError);
-        child.stdin.write(frame, (error) => {
-          child.stdin.off("error", handleError);
-          if (error) {
-            reject(error);
-            return;
-          }
-
-          resolve();
-        });
+      await writeFrameToMuxerInput({
+        stdin: child.stdin,
+        frame,
+        logger,
+        diagnostics,
+        exitPromise,
+        timeoutMs: MUX_WRITE_TIMEOUT_MS
       });
     },
     async finish() {

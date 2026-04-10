@@ -1,7 +1,10 @@
+import { EventEmitter } from "node:events";
 import { vi } from "vitest";
 import {
   createOrderedFrameWriteQueue,
-  resolveRenderParallelism
+  renderFrameWithWorkerRecovery,
+  resolveRenderParallelism,
+  writeFrameToMuxerInput
 } from "../src/index";
 
 describe("parallel rendering helpers", () => {
@@ -130,6 +133,49 @@ describe("parallel rendering helpers", () => {
     await expect(orderedQueue.finish()).rejects.toThrow("mux failed");
   });
 
+  it("releases the next required frame when queue capacity stays full across a flush", async () => {
+    let releaseFirstWrite: (() => void) | null = null;
+    const writes: string[] = [];
+    const frameQueue = {
+      enqueue: vi.fn(async (frame: Buffer) => {
+        writes.push(frame.toString("utf8"));
+        if (writes.length === 1) {
+          await new Promise<void>((resolve) => {
+            releaseFirstWrite = resolve;
+          });
+        }
+      }),
+      finish: vi.fn(async () => undefined),
+      abort: vi.fn(async () => undefined)
+    };
+
+    const orderedQueue = createOrderedFrameWriteQueue({
+      totalFrames: 4,
+      frameQueue,
+      maxPendingFrames: 2
+    });
+
+    await orderedQueue.enqueue({ frame: 0, buffer: Buffer.from("0") });
+    await orderedQueue.enqueue({ frame: 2, buffer: Buffer.from("2") });
+    await orderedQueue.enqueue({ frame: 3, buffer: Buffer.from("3") });
+
+    let nextFrameSettled = false;
+    const nextFrame = orderedQueue.enqueue({ frame: 1, buffer: Buffer.from("1") }).then(() => {
+      nextFrameSettled = true;
+    });
+
+    await waitForAsyncQueueWork();
+    expect(nextFrameSettled).toBe(false);
+
+    releaseFirstWrite?.();
+
+    await nextFrame;
+    await orderedQueue.finish();
+
+    expect(nextFrameSettled).toBe(true);
+    expect(writes).toEqual(["0", "1", "2", "3"]);
+  });
+
   it("fails finish when frames are missing", async () => {
     const orderedQueue = createOrderedFrameWriteQueue({
       totalFrames: 3,
@@ -146,10 +192,151 @@ describe("parallel rendering helpers", () => {
       "Render finished with missing frames."
     );
   });
+
+  it("times out stalled ffmpeg stdin writes with mux diagnostics", async () => {
+    const logger = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn()
+    };
+    const stdin = new FakeWritable({
+      acceptWrite: true
+    });
+
+    await expect(
+      writeFrameToMuxerInput({
+        stdin: stdin as never,
+        frame: Buffer.from("frame"),
+        logger,
+        diagnostics: {
+          orderedPendingFrames: 2,
+          orderedNextFrameToWrite: 17,
+          orderedLastFlushedFrame: 16,
+          frameQueueBufferedFrames: 1,
+          frameQueueLastCompletedFrame: 15,
+          ffmpegFramesWritten: 16,
+          ffmpegLastWriteStartedAtMs: Date.now(),
+          ffmpegLastWriteCompletedAtMs: Date.now() - 1000,
+          ffmpegPid: 1234
+        },
+        timeoutMs: 25
+      })
+    ).rejects.toThrow("ffmpeg stdin write timed out");
+
+    expect(logger.error).toHaveBeenCalledTimes(1);
+    expect(logger.error.mock.calls[0][0]).toContain("ffmpeg stdin write stalled");
+    expect(logger.error.mock.calls[0][0]).toContain("nextExpected=17");
+  });
+
+  it("waits for drain before completing a backpressured ffmpeg stdin write", async () => {
+    const logger = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn()
+    };
+    const stdin = new FakeWritable({
+      acceptWrite: false
+    });
+
+    let settled = false;
+    const writePromise = writeFrameToMuxerInput({
+      stdin: stdin as never,
+      frame: Buffer.from("frame"),
+      logger,
+      diagnostics: {
+        orderedPendingFrames: 0,
+        orderedNextFrameToWrite: 1,
+        orderedLastFlushedFrame: 0,
+        frameQueueBufferedFrames: 1,
+        frameQueueLastCompletedFrame: 0,
+        ffmpegFramesWritten: 0,
+        ffmpegLastWriteStartedAtMs: 0,
+        ffmpegLastWriteCompletedAtMs: Date.now(),
+        ffmpegPid: 4321
+      },
+      timeoutMs: 1000
+    }).then(() => {
+      settled = true;
+    });
+
+    stdin.completeWrite();
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    stdin.emitDrain();
+    await writePromise;
+    expect(settled).toBe(true);
+  });
+
+  it("recreates a worker session and retries a frame after a timed out render stage", async () => {
+    const logger = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn()
+    };
+    const disposeFirst = vi.fn(async () => undefined);
+    const firstWorker = {
+      renderFrame: vi.fn(async () => {
+        throw new Error("Chromium session worker-7 timed out during capture for frame 1335 after 15000ms.");
+      }),
+      dispose: disposeFirst
+    };
+    const secondWorker = {
+      renderFrame: vi.fn(async ({ frame }: { frame: number }) => ({
+        png: Buffer.from(String(frame)),
+        frame,
+        timeMs: frame * 10
+      })),
+      dispose: vi.fn(async () => undefined)
+    };
+    const workerHandle = {
+      current: firstWorker
+    };
+
+    const result = await renderFrameWithWorkerRecovery({
+      workerHandle,
+      frame: 1335,
+      workerIndex: 7,
+      createWorkerSession: vi.fn(async () => secondWorker),
+      logger,
+      retryLimit: 2
+    });
+
+    expect(disposeFirst).toHaveBeenCalledTimes(1);
+    expect(workerHandle.current).toBe(secondWorker);
+    expect(secondWorker.renderFrame).toHaveBeenCalledWith({ frame: 1335 });
+    expect(result.frame).toBe(1335);
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+  });
 });
 
 async function waitForAsyncQueueWork() {
   await new Promise<void>((resolve) => {
     setTimeout(resolve, 0);
   });
+}
+
+class FakeWritable extends EventEmitter {
+  private readonly acceptWrite: boolean;
+  private callback: ((error?: Error | null) => void) | null = null;
+
+  constructor({ acceptWrite }: { acceptWrite: boolean }) {
+    super();
+    this.acceptWrite = acceptWrite;
+  }
+
+  write(_chunk: Buffer, callback: (error?: Error | null) => void) {
+    this.callback = callback;
+    return this.acceptWrite;
+  }
+
+  completeWrite(error?: Error) {
+    const callback = this.callback;
+    this.callback = null;
+    callback?.(error ?? null);
+  }
+
+  emitDrain() {
+    this.emit("drain");
+  }
 }
