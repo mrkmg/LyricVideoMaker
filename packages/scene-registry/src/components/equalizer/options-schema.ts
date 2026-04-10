@@ -73,7 +73,7 @@ export const equalizerOptionsSchema: SceneOptionEntry[] = [
     id: "bars",
     label: "Bars",
     options: [
-      { type: "number", id: "barCount", label: "Bar Count", defaultValue: 28, min: 4, max: 64, step: 1 },
+      { type: "number", id: "barCount", label: "Bar Count", defaultValue: 28, min: 4, max: 128, step: 1 },
       { type: "number", id: "barGap", label: "Bar Gap", defaultValue: 6, min: 0, max: 36, step: 1 },
       { type: "number", id: "cornerRadius", label: "Corner Radius", defaultValue: 999, min: 0, max: 999, step: 1 },
       { type: "number", id: "minBarScale", label: "Min Bar Scale", defaultValue: 12, min: 0, max: 100, step: 1 },
