@@ -3,6 +3,7 @@ import type {
   SerializedSceneComponentDefinition,
   SerializedSceneDefinition
 } from "@lyric-video-maker/core";
+import { InfoTip } from "./form-fields";
 
 export function SceneDetailsEditor({
   builtInScenes,
@@ -33,18 +34,14 @@ export function SceneDetailsEditor({
 }) {
   return (
     <section className="panel inspector-panel">
-      <div className="panel-header">
-        <div>
-          <p className="eyebrow">Inspector</p>
-          <h2>Scene</h2>
-        </div>
-      </div>
 
       <div className="inspector-layout">
         <section className="inspector-section">
           <div className="inspector-section-header">
-            <h3>Saved Scenes</h3>
-            <p>Switch between built-in and user scenes, then save or export changes.</p>
+            <div className="section-title-row">
+              <h3>Saved Scenes</h3>
+              <InfoTip text="Switch between built-in and user scenes, then save or export changes." />
+            </div>
           </div>
 
           <div className="inspector-grid inspector-grid-two">
@@ -101,8 +98,10 @@ export function SceneDetailsEditor({
 
         <section className="inspector-section">
           <div className="inspector-section-header">
-            <h3>Scene Metadata</h3>
-            <p>Update the local scene name and description used by the composer.</p>
+            <div className="section-title-row">
+              <h3>Metadata</h3>
+              <InfoTip text="Update the local scene name and description used by the composer." />
+            </div>
           </div>
 
           <div className="inspector-grid inspector-grid-two">
@@ -134,22 +133,7 @@ export function SceneDetailsEditor({
             />
           </label>
         </section>
-
-        <section className="inspector-section">
-          <div className="inspector-section-header">
-            <h3>Available Components</h3>
-            <p>Built-in stack components currently registered in the scene builder.</p>
-          </div>
-
-          <div className="component-chip-list">
-            {components.map((component) => (
-              <div key={component.id} className="component-chip">
-                <strong>{component.name}</strong>
-                {component.description ? <p>{component.description}</p> : null}
-              </div>
-            ))}
-          </div>
-        </section>
+      
       </div>
     </section>
   );

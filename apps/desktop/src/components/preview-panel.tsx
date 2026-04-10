@@ -1,6 +1,7 @@
 import React, { type CSSProperties } from "react";
 import { durationMsToFrameCount } from "@lyric-video-maker/core";
 import type { ComposerState } from "../composer-types";
+import { InfoTip } from "./form-fields";
 import { useFramePreview } from "../use-frame-preview";
 
 export function PreviewPanel({
@@ -33,6 +34,10 @@ export function PreviewPanel({
       <div className="panel-header">
         <div>
           <p className="eyebrow">Preview</p>
+          <div className="panel-title-row">
+            <h2>Frame Preview</h2>
+            <InfoTip text="Scrub a single rendered frame before starting a full MP4 render." />
+          </div>
         </div>
         <div className="preview-status-block">
           <span className="preview-timestamp">

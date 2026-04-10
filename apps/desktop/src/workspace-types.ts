@@ -1,5 +1,4 @@
 export type WorkspaceSelection =
-  | { type: "general" }
   | { type: "scene" }
   | { type: "component"; instanceId: string };
 

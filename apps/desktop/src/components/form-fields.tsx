@@ -4,6 +4,41 @@ import type {
   SceneOptionField
 } from "@lyric-video-maker/core";
 
+export function InfoTip({
+  text,
+  label = "More information"
+}: {
+  text: string;
+  label?: string;
+}) {
+  return (
+    <span
+      className="info-tip"
+      tabIndex={0}
+      role="note"
+      title={text}
+      aria-label={`${label}: ${text}`}
+    >
+      i
+    </span>
+  );
+}
+
+function FieldLabel({
+  label,
+  helpText
+}: {
+  label: string;
+  helpText?: string;
+}) {
+  return (
+    <span className="field-label">
+      <span>{label}</span>
+      {helpText ? <InfoTip text={helpText} label={label} /> : null}
+    </span>
+  );
+}
+
 export function OptionCategorySection({
   category,
   children
@@ -23,6 +58,7 @@ export function OptionCategorySection({
 
 export function NumberField({
   label,
+  helpText,
   value,
   min,
   max,
@@ -30,6 +66,7 @@ export function NumberField({
   onChange
 }: {
   label: string;
+  helpText?: string;
   value: number;
   min?: number;
   max?: number;
@@ -38,7 +75,7 @@ export function NumberField({
 }) {
   return (
     <label className="field">
-      <span>{label}</span>
+      <FieldLabel label={label} helpText={helpText} />
       <input
         type="number"
         min={min}
@@ -53,18 +90,20 @@ export function NumberField({
 
 export function SelectField({
   label,
+  helpText,
   value,
   options,
   onChange
 }: {
   label: string;
+  helpText?: string;
   value: string;
   options: Array<{ value: string; label: string }>;
   onChange: (value: string) => void;
 }) {
   return (
     <label className="field">
-      <span>{label}</span>
+      <FieldLabel label={label} helpText={helpText} />
       <select value={value} onChange={(event) => onChange(event.target.value)}>
         {options.map((option) => (
           <option key={option.value} value={option.value}>
@@ -78,21 +117,30 @@ export function SelectField({
 
 export function FileField({
   label,
+  helpText,
   value,
   buttonLabel,
   onPick,
   compact = false
 }: {
   label: string;
+  helpText?: string;
   value: string;
   buttonLabel: string;
   onPick: () => void;
   compact?: boolean;
 }) {
+  const hasValue = value.trim().length > 0;
+
   return (
     <div className={`field file-field${compact ? " file-field-compact" : ""}`}>
-      <span>{label}</span>
-      <div className="file-pill">{value || "Not selected"}</div>
+      <FieldLabel label={label} helpText={helpText} />
+      <div
+        className={`file-pill${hasValue ? "" : " is-empty"}`}
+        title={hasValue ? value : "Not selected"}
+      >
+        {value || "Not selected"}
+      </div>
       <button className="secondary" onClick={onPick}>{buttonLabel}</button>
     </div>
   );
@@ -119,7 +167,9 @@ export function OptionField({
     case "boolean":
       return (
         <div className="option-row">
-          <label className="option-label" htmlFor={inputId}>{field.label}</label>
+          <label className="option-label" htmlFor={inputId}>
+            <FieldLabel label={field.label} />
+          </label>
           <div className="option-input checkbox-input">
             <input
               id={inputId}
@@ -133,7 +183,9 @@ export function OptionField({
     case "number":
       return (
         <div className="option-row">
-          <label className="option-label" htmlFor={inputId}>{field.label}</label>
+          <label className="option-label" htmlFor={inputId}>
+            <FieldLabel label={field.label} />
+          </label>
           <div className="option-input">
             <input
               id={inputId}
@@ -150,7 +202,9 @@ export function OptionField({
     case "text":
       return (
         <div className="option-row option-row-multiline">
-          <label className="option-label" htmlFor={inputId}>{field.label}</label>
+          <label className="option-label" htmlFor={inputId}>
+            <FieldLabel label={field.label} />
+          </label>
           <div className="option-input">
             {field.multiline ? (
               <textarea
@@ -171,7 +225,9 @@ export function OptionField({
     case "color":
       return (
         <div className="option-row">
-          <label className="option-label" htmlFor={inputId}>{field.label}</label>
+          <label className="option-label" htmlFor={inputId}>
+            <FieldLabel label={field.label} />
+          </label>
           <div className="option-input">
             <input
               id={inputId}
@@ -185,7 +241,9 @@ export function OptionField({
     case "font":
       return (
         <div className="option-row">
-          <label className="option-label" htmlFor={inputId}>{field.label}</label>
+          <label className="option-label" htmlFor={inputId}>
+            <FieldLabel label={field.label} />
+          </label>
           <div className="option-input">
             <select
               id={inputId}
@@ -200,7 +258,9 @@ export function OptionField({
     case "image":
       return (
         <div className="option-row option-row-multiline">
-          <div className="option-label">{field.label}</div>
+          <div className="option-label">
+            <FieldLabel label={field.label} />
+          </div>
           <div className="option-input file-picker-input">
             <div className="file-pill">{String(value ?? "") || "Not selected"}</div>
             <button className="secondary" onClick={onPickImage}>Pick image</button>
@@ -210,7 +270,9 @@ export function OptionField({
     case "select":
       return (
         <div className="option-row">
-          <label className="option-label" htmlFor={inputId}>{field.label}</label>
+          <label className="option-label" htmlFor={inputId}>
+            <FieldLabel label={field.label} />
+          </label>
           <div className="option-input">
             <select
               id={inputId}

@@ -11,7 +11,6 @@ export function WorkspaceNavPanel({
   selection,
   componentCatalog,
   componentToAddId,
-  onSelectGeneral,
   onSelectScene,
   onSelectComponent,
   onComponentToAddIdChange,
@@ -25,7 +24,6 @@ export function WorkspaceNavPanel({
   selection: WorkspaceSelection;
   componentCatalog: ReadonlyMap<string, SerializedSceneComponentDefinition>;
   componentToAddId: string;
-  onSelectGeneral: () => void;
   onSelectScene: () => void;
   onSelectComponent: (instanceId: string) => void;
   onComponentToAddIdChange: (componentId: string) => void;
@@ -45,16 +43,6 @@ export function WorkspaceNavPanel({
       </div>
 
       <div className="workspace-nav">
-        <button
-          type="button"
-          className={`workspace-nav-item ${selection.type === "general" ? "is-selected" : ""}`}
-          aria-label="General"
-          onClick={onSelectGeneral}
-        >
-          <span className="workspace-nav-title">General</span>
-          <span className="workspace-nav-subtitle">Files, video properties, render</span>
-        </button>
-
         <section className="workspace-nav-section">
           <div className="workspace-nav-section-label">Scene Builder</div>
 

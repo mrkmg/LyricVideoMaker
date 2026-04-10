@@ -38,21 +38,23 @@ export function App() {
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [componentToAddId, setComponentToAddId] = useState("");
-  const [selection, setSelection] = useState<WorkspaceSelection>({ type: "general" });
+  const [selection, setSelection] = useState<WorkspaceSelection>({ type: "scene" });
   const [renderDialogEntry, setRenderDialogEntry] = useState<RenderHistoryEntry | null>(null);
   const [isRenderDialogOpen, setIsRenderDialogOpen] = useState(false);
-  const [sidebarWidth, setSidebarWidth] = useState(340);
-  const [inspectorHeight, setInspectorHeight] = useState(340);
-  const [activeResizeHandle, setActiveResizeHandle] = useState<"sidebar" | "inspector" | null>(
-    null
-  );
+  const [generalPaneWidth, setGeneralPaneWidth] = useState(360);
+  const [sidebarWidth, setSidebarWidth] = useState(300);
+  const [inspectorHeight, setInspectorHeight] = useState(300);
+  const [activeResizeHandle, setActiveResizeHandle] = useState<
+    "general" | "sidebar" | "inspector" | null
+  >(null);
   const workspaceRef = useRef<HTMLElement | null>(null);
   const mainPaneRef = useRef<HTMLElement | null>(null);
   const resizeStateRef = useRef<
     | {
-        handle: "sidebar" | "inspector";
+        handle: "general" | "sidebar" | "inspector";
         startX: number;
         startY: number;
+        startGeneralWidth: number;
         startWidth: number;
         startHeight: number;
       }
@@ -89,12 +91,25 @@ export function App() {
         return;
       }
 
-      if (resizeState.handle === "sidebar") {
+      if (resizeState.handle === "general" || resizeState.handle === "sidebar") {
         const containerWidth = workspaceRef.current?.clientWidth ?? window.innerWidth;
-        const maxWidth = Math.max(SIDEBAR_MIN_WIDTH, containerWidth - SIDEBAR_MAX_GUTTER);
+        const reservedWidth =
+          resizeState.handle === "general" ? sidebarWidth : resizeState.startGeneralWidth;
+        const maxWidth = Math.max(SIDEBAR_MIN_WIDTH, containerWidth - reservedWidth - SIDEBAR_MAX_GUTTER);
+        const nextWidth = clamp(
+          resizeState.startWidth + event.clientX - resizeState.startX,
+          SIDEBAR_MIN_WIDTH,
+          maxWidth
+        );
+
+        if (resizeState.handle === "general") {
+          setGeneralPaneWidth(nextWidth);
+          return;
+        }
+
         setSidebarWidth(
           clamp(
-            resizeState.startWidth + event.clientX - resizeState.startX,
+            nextWidth,
             SIDEBAR_MIN_WIDTH,
             maxWidth
           )
@@ -406,73 +421,6 @@ export function App() {
   }
 
   function renderInspector() {
-    if (selection.type === "general") {
-      return (
-        <GeneralDetailsEditor
-          composer={composer}
-          selectedVideoSizePresetId={selectedVideoSizePresetId}
-          selectedFpsPresetId={selectedFpsPresetId}
-          error={error}
-          isSubmitting={isSubmitting}
-          hasActiveRender={hasActiveRender}
-          onPickPath={(kind) => void handlePickPath(kind)}
-          onVideoSizePresetChange={(value) => {
-            if (value === "custom") {
-              return;
-            }
-
-            const preset = VIDEO_SIZE_PRESETS.find((entry) => entry.id === value);
-            if (!preset) {
-              return;
-            }
-
-            setComposer((current) => ({
-              ...current,
-              video: {
-                ...current.video,
-                width: preset.width,
-                height: preset.height
-              }
-            }));
-          }}
-          onFpsPresetChange={(value) => {
-            if (value === "custom") {
-              return;
-            }
-
-            const preset = FPS_PRESETS.find((entry) => entry.id === value);
-            if (!preset) {
-              return;
-            }
-
-            setComposer((current) => ({
-              ...current,
-              video: { ...current.video, fps: preset.fps }
-            }));
-          }}
-          onWidthChange={(value) =>
-            setComposer((current) => ({
-              ...current,
-              video: { ...current.video, width: value }
-            }))
-          }
-          onHeightChange={(value) =>
-            setComposer((current) => ({
-              ...current,
-              video: { ...current.video, height: value }
-            }))
-          }
-          onFpsChange={(value) =>
-            setComposer((current) => ({
-              ...current,
-              video: { ...current.video, fps: value }
-            }))
-          }
-          onSubmit={() => void handleSubmit()}
-        />
-      );
-    }
-
     if (selection.type === "scene") {
       return (
         <SceneDetailsEditor
@@ -522,29 +470,107 @@ export function App() {
     return null;
   }
 
-  function startResize(handle: "sidebar" | "inspector", event: React.MouseEvent<HTMLDivElement>) {
+  function startResize(
+    handle: "general" | "sidebar" | "inspector",
+    event: React.MouseEvent<HTMLDivElement>
+  ) {
     resizeStateRef.current = {
       handle,
       startX: event.clientX,
       startY: event.clientY,
-      startWidth: sidebarWidth,
+      startGeneralWidth: generalPaneWidth,
+      startWidth: handle === "general" ? generalPaneWidth : sidebarWidth,
       startHeight: inspectorHeight
     };
     setActiveResizeHandle(handle);
-    document.body.style.cursor = handle === "sidebar" ? "col-resize" : "row-resize";
+    document.body.style.cursor = handle === "inspector" ? "row-resize" : "col-resize";
     document.body.style.userSelect = "none";
   }
 
   return (
     <div className={`app-shell${activeResizeHandle ? ` is-resizing-${activeResizeHandle}` : ""}`}>
       <main className="workspace-shell" ref={workspaceRef}>
+        <aside className="workspace-pane workspace-general-pane" style={{ width: generalPaneWidth }}>
+          <GeneralDetailsEditor
+            composer={composer}
+            selectedVideoSizePresetId={selectedVideoSizePresetId}
+            selectedFpsPresetId={selectedFpsPresetId}
+            eyebrow="Workspace"
+            className="workspace-general-panel"
+            error={error}
+            isSubmitting={isSubmitting}
+            hasActiveRender={hasActiveRender}
+            onPickPath={(kind) => void handlePickPath(kind)}
+            onVideoSizePresetChange={(value) => {
+              if (value === "custom") {
+                return;
+              }
+
+              const preset = VIDEO_SIZE_PRESETS.find((entry) => entry.id === value);
+              if (!preset) {
+                return;
+              }
+
+              setComposer((current) => ({
+                ...current,
+                video: {
+                  ...current.video,
+                  width: preset.width,
+                  height: preset.height
+                }
+              }));
+            }}
+            onFpsPresetChange={(value) => {
+              if (value === "custom") {
+                return;
+              }
+
+              const preset = FPS_PRESETS.find((entry) => entry.id === value);
+              if (!preset) {
+                return;
+              }
+
+              setComposer((current) => ({
+                ...current,
+                video: { ...current.video, fps: preset.fps }
+              }));
+            }}
+            onWidthChange={(value) =>
+              setComposer((current) => ({
+                ...current,
+                video: { ...current.video, width: value }
+              }))
+            }
+            onHeightChange={(value) =>
+              setComposer((current) => ({
+                ...current,
+                video: { ...current.video, height: value }
+              }))
+            }
+            onFpsChange={(value) =>
+              setComposer((current) => ({
+                ...current,
+                video: { ...current.video, fps: value }
+              }))
+            }
+            onSubmit={() => void handleSubmit()}
+          />
+        </aside>
+
+        <div
+          className="workspace-splitter workspace-splitter-vertical"
+          role="separator"
+          aria-label="Resize general panel"
+          aria-orientation="vertical"
+          onMouseDown={(event) => startResize("general", event)}
+        />
+
         <aside className="workspace-pane workspace-sidebar-pane" style={{ width: sidebarWidth }}>
           <WorkspaceNavPanel
             selectedScene={selectedScene}
             selection={selection}
             componentCatalog={componentCatalog}
             componentToAddId={componentToAddId}
-            onSelectGeneral={() => setSelection({ type: "general" })}
             onSelectScene={() => setSelection({ type: "scene" })}
             onSelectComponent={(instanceId) => setSelection({ type: "component", instanceId })}
             onComponentToAddIdChange={setComponentToAddId}
