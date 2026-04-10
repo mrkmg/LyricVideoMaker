@@ -22,10 +22,13 @@ If you are new to the repo, read these files first:
 2. [apps/desktop/electron/main.ts](./apps/desktop/electron/main.ts) — slim composition entry; collaborators live under `electron/services/` and `electron/ipc/`
 3. [apps/desktop/electron/ipc/register-ipc-handlers.ts](./apps/desktop/electron/ipc/register-ipc-handlers.ts) — IPC surface, one file per feature under `electron/ipc/`
 4. [apps/desktop/src/App.tsx](./apps/desktop/src/App.tsx) — slim composition; state lives in `src/state/*`, features in `src/features/*`
-5. [packages/core/src/types.ts](./packages/core/src/types.ts)
-6. [packages/core/src/scenes.ts](./packages/core/src/scenes.ts)
-7. [packages/scene-registry/src/scenes/single-image-lyrics/index.ts](./packages/scene-registry/src/scenes/single-image-lyrics/index.ts)
-8. [packages/renderer/src/index.ts](./packages/renderer/src/index.ts)
+5. [packages/core/src/types/scene-component.ts](./packages/core/src/types/scene-component.ts) — scene contract types
+6. [packages/core/src/scenes/option-validation.ts](./packages/core/src/scenes/option-validation.ts) — scene + option validation
+7. [packages/core/src/scenes/render-job.ts](./packages/core/src/scenes/render-job.ts) — render-job builder
+8. [packages/scene-registry/src/scenes/single-image-lyrics/index.ts](./packages/scene-registry/src/scenes/single-image-lyrics/index.ts) — built-in scene composition
+9. [packages/scene-registry/src/components/equalizer/component.ts](./packages/scene-registry/src/components/equalizer/component.ts) — example folder-component assembly
+10. [packages/renderer/src/index.ts](./packages/renderer/src/index.ts) — renderer public barrel
+11. [packages/renderer/src/pipeline/render-lyric-video.ts](./packages/renderer/src/pipeline/render-lyric-video.ts) — main render orchestrator
 
 Those files show the app boundary, the IPC contract, the UI composition, the shared scene contract, the built-in scene structure, and the render pipeline.
 
@@ -61,31 +64,48 @@ Electron + React desktop app, organized into a layered structure on both sides o
 
 ### `packages/core`
 
-Shared domain logic. Put logic here when it is needed by both Electron and renderer code.
+Shared domain logic. Put logic here when it is needed by both Electron and renderer code. The package is layered into focused subdirectories; `src/index.ts` is a barrel that re-exports everything publicly.
 
-- `srt.ts`: subtitle parsing
-- `timeline.ts`: cue lookup and frame/time conversion helpers
-- `types.ts`: scene contracts, cue model, render job model, progress/history types
-- `scenes.ts`: option validation, scene serialization, scene-file parsing, render-job creation
-- `constants.ts`: defaults such as video size, fps, scene-file version, and supported fonts
+- `src/constants.ts`: defaults such as video size, fps, scene-file version, and supported fonts
+- `src/srt.ts`: subtitle parsing (single-purpose)
+- `src/timeline/`: cue lookup and frame/time conversion helpers, plus the stateful runtime cursor
+  - `cue-lookup.ts`, `frame-time.ts`, `runtime.ts`
+- `src/types/`: domain types, split by concern
+  - `lyric.ts`, `video.ts`, `scene-options.ts`, `scene-audio.ts`, `scene-component.ts`, `render.ts`
+- `src/scenes/`: option validation, scene serialization, render-job creation
+  - `option-validation.ts`, `serialization.ts`, `render-job.ts`
 
 ### `packages/scene-registry`
 
-Built-in scenes and reusable scene components.
+Built-in scenes and reusable scene components. `src/index.ts` is the public barrel.
 
 - `src/index.ts`: exports built-in scenes/components and lookup helpers
-- `src/components/*`: reusable visual pieces such as the background, equalizer, and lyrics renderer
+- `src/shared/`: package-internal utilities shared across components — `color.ts` (`withAlpha`, `mixHex`, `parseHexColor`, `rgbToHex`) and `math.ts` (`clamp01`, `safeScale`). Components import via relative paths; not re-exported from the package barrel.
+- `src/components/background-image.tsx`, `background-color.tsx`: small single-file components
+- `src/components/lyrics-by-line/`: folder-component decomposed into single-purpose modules — `types.ts`, `options-schema.ts`, `caches.ts`, `measurement.ts`, `fade.ts`, `layout.ts`, `typography.ts`, `browser-state.ts`, `react/component.tsx`, `component.ts` (the assembly), `index.ts`
+- `src/components/equalizer/`: folder-component decomposed into single-purpose modules — `types.ts`, `options-schema.ts`, `validation.ts`, `prepare.ts`, `layout.ts`, `color-plan.ts`, `bar-plan.ts`, `line-geometry.ts`, `shadow.ts`, `static-values.ts`, `browser-state.ts`, `react/{component,equalizer-bar,equalizer-line-graph}.tsx`, `component.ts`, `index.ts`
 - `src/scenes/single-image-lyrics/index.ts`: the only built-in scene in v1
 
 Scene-specific heavy work should happen in component `prepare(...)`, not inside per-frame rendering.
 
 ### `packages/renderer`
 
-Headless render coordinator.
+Headless render coordinator. `src/index.ts` is a thin public barrel; behavior lives in focused subdirectories.
 
-- `src/index.ts`: probes audio duration with `ffprobe`, preloads assets, renders scene markup to HTML, captures frames with Playwright Chromium, then muxes frames and audio with `ffmpeg`
-- `src/audio-analysis.ts`: audio spectrum extraction for scenes that need it
-- `src/live-dom.ts`: live DOM scene mounting and update helpers used by the Chromium render path
+- `src/index.ts`: public barrel for `renderLyricVideo`, `createFramePreviewSession`, `probeAudioDurationMs`, preview cache factories, plus the test-exported helpers
+- `src/constants.ts`: tunables and resolved ffmpeg/ffprobe paths
+- `src/types.ts`: shared internal types (`RenderLogger`, `FrameMuxer`, profiling types, etc.)
+- `src/abort.ts`: `throwIfAborted`, `createAbortError`, `isAbortError`
+- `src/logging.ts`: `createRenderLogger`, `createLogEntry`
+- `src/profiling.ts`: render and preview profilers, measure helpers, `traceRenderStep`
+- `src/ffmpeg/`: subprocess + mux pipeline — `run-command.ts` (single source of truth for `runCommand`/`runBinaryCommand`), `probe.ts`, `frame-muxer.ts`, `frame-writer.ts`, `bounded-output-buffer.ts`, `mux-diagnostics.ts`
+- `src/browser/`: Playwright orchestration — `chromium-loader.ts`, `render-page.ts`, `asset-routes.ts`, `capture.ts`, `diagnostics.ts`, `dispose.ts`, `live-dom-session.ts`
+- `src/react-ssr/`: server-side React markup helpers — `composite-markup.ts`, `lyric-runtime-bridge.ts`
+- `src/scene-prep/`: component prepare orchestration — `prepare-components.ts`, `cache-keys.ts`
+- `src/assets/`: asset preload + serve — `preload.ts`, `cache-body.ts`, `mime.ts`, `preview-cache.ts`
+- `src/pipeline/`: top-level orchestration — `render-lyric-video.ts`, `preview-session.ts`, `worker-frames.ts`, `parallelism.ts`, `frame-queue.ts`, `ordered-frame-queue.ts`, `progress.ts`, `static-detection.ts`
+- `src/audio-analysis.ts`: audio spectrum extraction for scenes that need it (uses the shared `ffmpeg/run-command.ts`)
+- `src/live-dom.ts`: live DOM scene mounting and update helpers used by the Chromium render path. **Known coupling: this file hardcodes a `runtimeRegistry` for the four built-in scene-registry component IDs (`background-image`, `background-color`, `lyrics-by-line`, `equalizer`).** Adding a new built-in scene component requires editing this file as well as the scene-registry component itself. The decoupling is intentionally deferred — fixing it requires a contract change to `SceneBrowserRuntimeDefinition` and a design pass for serialized browser-side runtime scripts.
 - `tests/*`: render smoke, benchmark, preview-session, parallel-rendering, and audio-analysis coverage
 
 ## Data And Render Flow
@@ -143,11 +163,35 @@ The desktop app is layered. Match new code to the layer that already owns its co
 - **New styles:** add to the appropriate `src/styles/<group>.css`. Preserve the cascade order set by `src/styles/index.css`.
 - **New renderer-side IPC call:** import `lyricVideoApp` from `src/ipc/lyric-video-app.ts`. Don't reach into `window.lyricVideoApp` directly — the wrapper exists so tests can mock at the module level.
 
+### Within `packages/core`
+
+- **New shared type:** put it in the `src/types/` file that owns its concern (`lyric.ts`, `video.ts`, `scene-options.ts`, `scene-audio.ts`, `scene-component.ts`, or `render.ts`). Don't reintroduce a single grab-bag `types.ts`.
+- **New scene logic:** option validation goes in `src/scenes/option-validation.ts`, file serialization in `src/scenes/serialization.ts`, render-job creation in `src/scenes/render-job.ts`. Don't merge them back into a single `scenes.ts`.
+- **New timeline helper:** add to `src/timeline/cue-lookup.ts`, `frame-time.ts`, or `runtime.ts` based on responsibility.
+- The barrels (`src/index.ts`, `src/types/index.ts`, `src/scenes/index.ts`, `src/timeline/index.ts`) re-export everything; new modules need a line in their parent barrel to be visible publicly.
+
+### Within `packages/scene-registry`
+
+- **New built-in scene component:** create a folder under `src/components/<name>/` mirroring `equalizer/` or `lyrics-by-line/` — split into `types.ts`, `options-schema.ts`, `browser-state.ts`, `react/component.tsx`, `component.ts` (the assembly), `index.ts`. Register it in `src/components/index.ts`. **Also add a matching entry to the `runtimeRegistry` in `packages/renderer/src/live-dom.ts`** — this is a known coupling.
+- **Shared color/math helpers:** put them in `src/shared/color.ts` or `src/shared/math.ts`. Don't duplicate `withAlpha`, `clamp01`, etc. in components.
+- **New built-in scene:** copy the structure of `src/scenes/single-image-lyrics/index.ts` and register the result in `src/index.ts`'s `builtInScenes`.
+
+### Within `packages/renderer`
+
+- **New tunable / environment variable:** add it to `src/constants.ts`. Don't define `process.env` lookups inline in feature files.
+- **New ffmpeg invocation:** put it in `src/ffmpeg/`. Reuse `runCommand`/`runBinaryCommand` from `src/ffmpeg/run-command.ts` — there is exactly one copy in the package.
+- **New Playwright orchestration:** put it in `src/browser/`. Don't reach into Playwright APIs from `src/pipeline/`.
+- **New render orchestration step:** put it in `src/pipeline/`. Keep `pipeline/render-lyric-video.ts` and `pipeline/preview-session.ts` thin — extract reusable steps into sibling files.
+- **New frame state helper:** put it in `src/scene-prep/`, `src/react-ssr/`, or `src/assets/` depending on the concern.
+- **Profiling / measurement:** use the helpers in `src/profiling.ts`.
+- **Subprocess output capture:** use `createBoundedOutputBuffer` from `src/ffmpeg/bounded-output-buffer.ts`.
+- **Do not modify `src/live-dom.ts` lightly.** It runs inside Chromium and is hard to test. When adding a new built-in scene component, only add the matching `runtimeRegistry` entry — do not refactor surrounding code.
+
 ## Extension Points
 
 - New built-in scene: copy the structure of `single-image-lyrics`, register it in `packages/scene-registry/src/index.ts`, and add it to the scene list used by Electron bootstrap data.
-- New scene component: add it under `packages/scene-registry/src/components`, export it from the registry, and make sure the component can run in the live DOM renderer.
-- New option type: add it in `packages/core/src/types.ts`, validate it in `packages/core/src/scenes.ts`, and surface it through the schema-driven scene editor UI.
+- New scene component: add a folder under `packages/scene-registry/src/components/<name>/`, export it from `src/components/index.ts`, **and add a matching `runtimeRegistry` entry to `packages/renderer/src/live-dom.ts`** so it can run in the live DOM renderer.
+- New option type: add it in `packages/core/src/types/scene-options.ts`, validate it in `packages/core/src/scenes/option-validation.ts`, and surface it through the schema-driven scene editor UI.
 - Render behavior changes: keep the render-job contract stable unless the UI and tests are updated together.
 
 ## Things To Avoid

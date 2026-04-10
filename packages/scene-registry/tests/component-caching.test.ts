@@ -8,13 +8,16 @@ const pretextRuntime = vi.hoisted(() => ({
 vi.mock("@chenglou/pretext", () => pretextRuntime);
 
 import { equalizerComponent, lyricsByLineComponent } from "../src/components";
-import { lyricsByLineTestUtils } from "../src/components/lyrics-by-line";
+import {
+  clearAllCaches as clearLyricsByLineCaches,
+  getMeasurementCacheSize as getLyricsByLineMeasurementCacheSize
+} from "../src/components/lyrics-by-line/caches";
 
 describe("component caching", () => {
   beforeEach(() => {
     pretextRuntime.measureNaturalWidth.mockClear();
     pretextRuntime.prepareWithSegments.mockClear();
-    lyricsByLineTestUtils.clearCaches();
+    clearLyricsByLineCaches();
   });
 
   it("keeps the equalizer prepare cache key stable for cosmetic-only option changes", () => {
@@ -142,6 +145,6 @@ describe("component caching", () => {
       prepared: {}
     });
 
-    expect(lyricsByLineTestUtils.getMeasurementCacheSize()).toBe(1);
+    expect(getLyricsByLineMeasurementCacheSize()).toBe(1);
   });
 });

@@ -1,5 +1,6 @@
 import React from "react";
 import type { SceneComponentDefinition } from "@lyric-video-maker/core";
+import { withAlpha } from "../shared/color";
 
 export interface BackgroundColorOptions {
   topColor: string;
@@ -73,23 +74,3 @@ export const backgroundColorComponent: SceneComponentDefinition<BackgroundColorO
     />
   )
 };
-
-function withAlpha(hexColor: string, alpha: number) {
-  const normalized = hexColor.replace("#", "");
-  const expanded =
-    normalized.length === 3
-      ? normalized
-          .split("")
-          .map((char) => char + char)
-          .join("")
-      : normalized;
-
-  if (!/^[\da-fA-F]{6}$/.test(expanded)) {
-    return hexColor;
-  }
-
-  const red = Number.parseInt(expanded.slice(0, 2), 16);
-  const green = Number.parseInt(expanded.slice(2, 4), 16);
-  const blue = Number.parseInt(expanded.slice(4, 6), 16);
-  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
-}

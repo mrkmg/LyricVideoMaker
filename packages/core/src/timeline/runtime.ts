@@ -1,40 +1,5 @@
-import type { LyricCue, LyricRuntime } from "./types";
-
-export function getCueAt(cues: LyricCue[], ms: number): LyricCue | null {
-  return cues.find((cue) => ms >= cue.startMs && ms < cue.endMs) ?? null;
-}
-
-export function getNextCue(cues: LyricCue[], ms: number): LyricCue | null {
-  return cues.find((cue) => cue.startMs > ms) ?? null;
-}
-
-export function getCuesInRange(cues: LyricCue[], startMs: number, endMs: number): LyricCue[] {
-  return cues.filter((cue) => cue.endMs > startMs && cue.startMs < endMs);
-}
-
-export function getCueProgress(cue: LyricCue, ms: number): number {
-  if (ms <= cue.startMs) {
-    return 0;
-  }
-
-  if (ms >= cue.endMs) {
-    return 1;
-  }
-
-  return (ms - cue.startMs) / (cue.endMs - cue.startMs);
-}
-
-export function msToFrame(ms: number, fps: number): number {
-  return Math.max(0, Math.floor((ms / 1000) * fps));
-}
-
-export function frameToMs(frame: number, fps: number): number {
-  return (frame / fps) * 1000;
-}
-
-export function durationMsToFrameCount(durationMs: number, fps: number): number {
-  return Math.max(1, Math.ceil((durationMs / 1000) * fps));
-}
+import type { LyricCue, LyricRuntime } from "../types/lyric";
+import { getCueAt, getCueProgress, getCuesInRange, getNextCue } from "./cue-lookup";
 
 export function createLyricRuntime(cues: LyricCue[], timeMs = 0): LyricRuntime {
   return {
