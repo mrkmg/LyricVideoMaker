@@ -1,0 +1,21 @@
+:root {
+  color-scheme: dark;
+  font-family: "DM Sans", "Segoe UI", sans-serif;
+  font-size: 13px;
+  background: #10151d;
+  color: #eef3fb;
+  --app-bg: #10151d;
+  --pane-bg: #141b25;
+  --pane-bg-subtle: #171f2a;
+  --pane-border: rgba(218, 228, 243, 0.08);
+  --pane-border-strong: rgba(218, 228, 243, 0.16);
+  --pane-highlight: rgba(116, 182, 255, 0.16);
+  --field-bg: #1b2330;
+  --field-border: rgba(255, 255, 255, 0.08);
+  --field-border-strong: rgba(255, 255, 255, 0.16);
+  --text-muted: rgba(238, 243, 251, 0.72);
+  --text-soft: rgba(238, 243, 251, 0.46);
+  --accent: #8ec9ff;
+  --accent-strong: #5ca3ff;
+  --danger: #ff8080;
+}

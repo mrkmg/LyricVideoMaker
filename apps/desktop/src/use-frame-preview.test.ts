@@ -6,8 +6,8 @@ import { createElement } from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SerializedSceneDefinition } from "@lyric-video-maker/core";
-import type { ComposerState } from "./composer-types";
-import { useFramePreview } from "./use-frame-preview";
+import type { ComposerState } from "./state/composer-types";
+import { useFramePreview } from "./hooks/use-frame-preview";
 
 describe("useFramePreview", () => {
   beforeEach(() => {

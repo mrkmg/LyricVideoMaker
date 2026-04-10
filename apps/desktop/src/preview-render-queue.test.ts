@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createLatestOnlyPreviewRenderQueue } from "../electron/preview-render-queue";
+import { createLatestOnlyPreviewRenderQueue } from "../electron/services/preview/render-queue";
 
 describe("createLatestOnlyPreviewRenderQueue", () => {
   it("keeps one active request and coalesces pending work to the latest target", async () => {

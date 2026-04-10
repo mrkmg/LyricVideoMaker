@@ -3,11 +3,11 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import type { SubtitleGenerationProgressEvent } from "./electron-api";
 import {
   createGeneratedSubtitlePath,
-  createSubtitleGenerationRunner,
-  type SubtitleGenerationProgressEvent
-} from "../electron/subtitle-generator";
+  createSubtitleGenerationRunner
+} from "../electron/services/subtitle-generator";
 
 class MockChildProcess extends EventEmitter {
   public readonly stdout = Object.assign(new EventEmitter(), {

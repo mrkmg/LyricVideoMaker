@@ -4,7 +4,7 @@ import type {
   SerializedSceneComponentDefinition
 } from "@lyric-video-maker/core";
 import { isSceneOptionCategory } from "@lyric-video-maker/core";
-import { InfoTip, OptionCategorySection, OptionField } from "./form-fields";
+import { InfoTip, OptionCategorySection, OptionField } from "../../components/ui/form-fields";
 
 export function ComponentDetailsEditor({
   component,

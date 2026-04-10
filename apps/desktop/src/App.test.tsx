@@ -12,9 +12,9 @@ import type {
   SubtitleGenerationProgressEvent
 } from "./electron-api";
 import { App } from "./App";
-import { useFramePreview, type ResolvedFramePreview } from "./use-frame-preview";
+import { useFramePreview, type ResolvedFramePreview } from "./hooks/use-frame-preview";
 
-vi.mock("./use-frame-preview", () => ({
+vi.mock("./hooks/use-frame-preview", () => ({
   useFramePreview: vi.fn()
 }));
 

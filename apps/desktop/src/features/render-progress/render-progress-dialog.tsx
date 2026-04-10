@@ -1,6 +1,7 @@
 import React from "react";
 import type { RenderHistoryEntry } from "@lyric-video-maker/core";
-import { formatEta, getFileName } from "../app-utils";
+import { formatEta } from "../../lib/format";
+import { getFileName } from "../../lib/path-utils";
 
 const ACTIVE_STATUSES = new Set(["queued", "preparing", "rendering", "muxing"]);
 

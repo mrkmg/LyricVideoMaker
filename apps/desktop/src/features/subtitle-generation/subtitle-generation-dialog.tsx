@@ -2,8 +2,8 @@ import React from "react";
 import type {
   StartSubtitleGenerationRequest,
   SubtitleGenerationProgressEvent
-} from "../electron-api";
-import { FileField, InfoTip, SelectField } from "./form-fields";
+} from "../../electron-api";
+import { FileField, InfoTip, SelectField } from "../../components/ui/form-fields";
 
 const ALIGNMENT_LANGUAGE_OPTIONS = [
   { value: "en", label: "English" },

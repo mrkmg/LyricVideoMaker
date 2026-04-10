@@ -2,25 +2,11 @@ import { spawn, type ChildProcess, type SpawnOptions } from "node:child_process"
 import { existsSync } from "node:fs";
 import { access, constants } from "node:fs/promises";
 import { join } from "node:path";
-
-export type SubtitleGenerationMode = "transcribe" | "align";
-
-export interface StartSubtitleGenerationInput {
-  mode: SubtitleGenerationMode;
-  audioPath: string;
-  outputPath: string;
-  language: string;
-  lyricsTextPath?: string;
-}
-
-export interface SubtitleGenerationProgressEvent {
-  status: "starting" | "running" | "completed" | "failed" | "cancelled";
-  progress: number;
-  message: string;
-  stage?: string;
-  outputPath?: string;
-  error?: string;
-}
+import type {
+  StartSubtitleGenerationRequest,
+  SubtitleGenerationMode,
+  SubtitleGenerationProgressEvent
+} from "../../../src/electron-api";
 
 interface SidecarProgressMessage {
   type: "progress";
@@ -44,7 +30,7 @@ type SidecarMessage = SidecarProgressMessage | SidecarErrorMessage | SidecarResu
 
 export interface SubtitleGenerationRunner {
   run(
-    input: StartSubtitleGenerationInput,
+    input: StartSubtitleGenerationRequest,
     onProgress?: (event: SubtitleGenerationProgressEvent) => void
   ): Promise<{ outputPath: string }>;
   cancel(): void;

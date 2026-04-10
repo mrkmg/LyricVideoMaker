@@ -3,7 +3,7 @@ import type {
   SerializedSceneComponentDefinition,
   SerializedSceneDefinition
 } from "@lyric-video-maker/core";
-import { InfoTip } from "./form-fields";
+import { InfoTip } from "../../components/ui/form-fields";
 
 export function SceneDetailsEditor({
   builtInScenes,

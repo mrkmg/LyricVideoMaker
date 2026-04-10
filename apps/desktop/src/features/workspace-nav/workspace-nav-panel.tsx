@@ -4,7 +4,7 @@ import type {
   SerializedSceneComponentDefinition,
   SerializedSceneDefinition
 } from "@lyric-video-maker/core";
-import type { WorkspaceSelection } from "../workspace-types";
+import type { WorkspaceSelection } from "../../state/workspace-types";
 
 export function WorkspaceNavPanel({
   selectedScene,

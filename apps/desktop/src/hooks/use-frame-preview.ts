@@ -1,6 +1,7 @@
 import { startTransition, useDeferredValue, useEffect, useRef, useState } from "react";
-import type { RenderPreviewResponse } from "./electron-api";
-import type { ComposerState } from "./composer-types";
+import type { RenderPreviewResponse } from "../electron-api";
+import type { ComposerState } from "../state/composer-types";
+import { lyricVideoApp } from "../ipc/lyric-video-app";
 
 const PREVIEW_DEBOUNCE_MS = 250;
 
@@ -51,7 +52,7 @@ export function useFramePreview({
   useEffect(() => {
     return () => {
       revokeImageUrl(imageUrlRef.current);
-      void window.lyricVideoApp.disposePreview();
+      void lyricVideoApp.disposePreview();
     };
   }, []);
 
@@ -73,7 +74,7 @@ export function useFramePreview({
           }
         : emptyPreviewState
     );
-    void window.lyricVideoApp.disposePreview();
+    void lyricVideoApp.disposePreview();
   }, [enabled, paused]);
 
   useEffect(() => {
@@ -84,7 +85,7 @@ export function useFramePreview({
     requestGenerationRef.current += 1;
     inFlightRequestRef.current = null;
     queuedRequestRef.current = null;
-    void window.lyricVideoApp.disposePreview();
+    void lyricVideoApp.disposePreview();
   }, [composer.audioPath, composer.scene, composer.subtitlePath, composer.video, enabled, paused]);
 
   useEffect(() => {
@@ -171,7 +172,7 @@ export function useFramePreview({
     const requestStartMs = performance.now();
 
     try {
-      const result = await window.lyricVideoApp.renderPreviewFrame({
+      const result = await lyricVideoApp.renderPreviewFrame({
         audioPath: request.audioPath,
         subtitlePath: request.subtitlePath,
         scene: request.scene,

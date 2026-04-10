@@ -1,4 +1,4 @@
-import type { RenderPreviewRequest, RenderPreviewResponse } from "../src/electron-api";
+import type { RenderPreviewRequest, RenderPreviewResponse } from "../../../src/electron-api";
 
 export interface PreviewWorkerRenderFrameRequest {
   type: "render-frame";

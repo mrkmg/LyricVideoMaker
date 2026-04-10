@@ -1,0 +1,75 @@
+.app-shell {
+  height: 100vh;
+  overflow: hidden;
+  background: var(--app-bg);
+}
+
+.app-shell.loading {
+  display: grid;
+  place-items: center;
+}
+
+.workspace-shell {
+  height: 100%;
+  display: grid;
+  grid-template-columns: auto 1px auto 1px minmax(0, 1fr);
+  overflow: hidden;
+  border-top: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.workspace-pane {
+  min-width: 0;
+  min-height: 0;
+  background: var(--pane-bg);
+}
+
+.workspace-general-pane,
+.workspace-sidebar-pane {
+  overflow: hidden;
+}
+
+.workspace-main-pane {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) 1px auto;
+  overflow: hidden;
+}
+
+.workspace-preview-pane,
+.workspace-inspector-pane {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.workspace-splitter {
+  position: relative;
+  background: var(--pane-border);
+  z-index: 2;
+}
+
+.workspace-splitter::after {
+  content: "";
+  position: absolute;
+}
+
+.workspace-splitter-vertical {
+  cursor: col-resize;
+}
+
+.workspace-splitter-vertical::after {
+  top: 0;
+  bottom: 0;
+  left: -5px;
+  right: -5px;
+}
+
+.workspace-splitter-horizontal {
+  cursor: row-resize;
+}
+
+.workspace-splitter-horizontal::after {
+  left: 0;
+  right: 0;
+  top: -5px;
+  bottom: -5px;
+}

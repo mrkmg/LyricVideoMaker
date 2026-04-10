@@ -1,6 +1,6 @@
 import { Worker } from "node:worker_threads";
-import type { RenderPreviewRequest, RenderPreviewResponse } from "../src/electron-api";
-import type { PreviewWorkerRequest, PreviewWorkerResponse } from "./preview-worker-protocol";
+import type { RenderPreviewRequest, RenderPreviewResponse } from "../../../src/electron-api";
+import type { PreviewWorkerRequest, PreviewWorkerResponse } from "./worker-protocol";
 
 interface PendingRequest {
   resolve: (value: RenderPreviewResponse | void) => void;

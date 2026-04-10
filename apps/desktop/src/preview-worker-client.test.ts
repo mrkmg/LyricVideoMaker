@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
 import { describe, expect, it } from "vitest";
-import { PreviewWorkerClient } from "../electron/preview-worker-client";
+import { PreviewWorkerClient } from "../electron/services/preview/worker-client";
 
 class MockWorker extends EventEmitter {
   public readonly postedMessages: unknown[] = [];

@@ -1,8 +1,8 @@
 import React, { type CSSProperties } from "react";
 import { durationMsToFrameCount } from "@lyric-video-maker/core";
-import type { ComposerState } from "../composer-types";
-import { InfoTip } from "./form-fields";
-import { useFramePreview } from "../use-frame-preview";
+import type { ComposerState } from "../../state/composer-types";
+import { InfoTip } from "../../components/ui/form-fields";
+import { useFramePreview } from "../../hooks/use-frame-preview";
 
 export function PreviewPanel({
   paused,

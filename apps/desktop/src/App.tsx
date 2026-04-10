@@ -1,194 +1,72 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import type {
-  RenderHistoryEntry,
-  SceneComponentInstance
-} from "@lyric-video-maker/core";
-import {
-  cloneComponent,
-  cloneScene,
-  createInstanceId,
-  createSceneComponentInstance,
-  emptyComposerState,
-  FPS_PRESETS,
-  getFileName,
-  stripExtension,
-  upsertScene,
-  VIDEO_SIZE_PRESETS
-} from "./app-utils";
-import { ComponentDetailsEditor } from "./components/component-details-editor";
-import { GeneralDetailsEditor } from "./components/general-details-editor";
-import { PreviewPanel } from "./components/preview-panel";
-import { RenderProgressDialog } from "./components/render-progress-dialog";
-import { SceneDetailsEditor } from "./components/scene-details-editor";
-import { SubtitleGenerationDialog } from "./components/subtitle-generation-dialog";
-import { WorkspaceNavPanel } from "./components/workspace-nav-panel";
-import type { ComposerState } from "./composer-types";
-import type {
-  AppBootstrapData,
-  FilePickKind,
-  StartSubtitleGenerationRequest,
-  SubtitleGenerationProgressEvent
-} from "./electron-api";
-import type { WorkspaceSelection } from "./workspace-types";
-import { isComponentSelection } from "./workspace-types";
-
-const ACTIVE_RENDER_STATUSES = new Set(["queued", "preparing", "rendering", "muxing"]);
-const SIDEBAR_MIN_WIDTH = 280;
-const SIDEBAR_MAX_GUTTER = 540;
-const INSPECTOR_MIN_HEIGHT = 250;
-const INSPECTOR_MAX_GUTTER = 240;
+import React, { useMemo, useState } from "react";
+import { getFileName, stripExtension } from "./lib/path-utils";
+import { canStartSubtitleGeneration } from "./lib/subtitle-request";
+import { lyricVideoApp } from "./ipc/lyric-video-app";
+import { useBootstrap } from "./state/use-bootstrap";
+import { useComposer } from "./state/use-composer";
+import { useLayoutResize } from "./state/use-layout-resize";
+import { useRenderJob } from "./state/use-render-job";
+import { useSubtitleGeneration } from "./state/use-subtitle-generation";
+import { useWorkspaceSelection } from "./state/use-workspace-selection";
+import { ComponentDetailsEditor } from "./features/component-editor/component-details-editor";
+import { GeneralDetailsEditor } from "./features/project-setup/general-details-editor";
+import { PreviewPanel } from "./features/preview/preview-panel";
+import { RenderProgressDialog } from "./features/render-progress/render-progress-dialog";
+import { SceneDetailsEditor } from "./features/scene-editor/scene-details-editor";
+import { SubtitleGenerationDialog } from "./features/subtitle-generation/subtitle-generation-dialog";
+import { WorkspaceNavPanel } from "./features/workspace-nav/workspace-nav-panel";
+import { FPS_PRESETS, VIDEO_SIZE_PRESETS } from "./lib/video-presets";
+import type { FilePickKind } from "./electron-api";
+import { isComponentSelection } from "./state/workspace-types";
 
 export function App() {
-  const [bootstrap, setBootstrap] = useState<AppBootstrapData | null>(null);
-  const [composer, setComposer] = useState<ComposerState>(emptyComposerState);
   const [error, setError] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [componentToAddId, setComponentToAddId] = useState("");
-  const [selection, setSelection] = useState<WorkspaceSelection>({ type: "scene" });
-  const [renderDialogEntry, setRenderDialogEntry] = useState<RenderHistoryEntry | null>(null);
-  const [isRenderDialogOpen, setIsRenderDialogOpen] = useState(false);
-  const [isSubtitleDialogOpen, setIsSubtitleDialogOpen] = useState(false);
-  const [isGeneratingSubtitles, setIsGeneratingSubtitles] = useState(false);
-  const [subtitleGenerationRequest, setSubtitleGenerationRequest] =
-    useState<StartSubtitleGenerationRequest>(createInitialSubtitleGenerationRequest);
-  const [subtitleGenerationProgress, setSubtitleGenerationProgress] =
-    useState<SubtitleGenerationProgressEvent | null>(null);
-  const [generalPaneWidth, setGeneralPaneWidth] = useState(360);
-  const [sidebarWidth, setSidebarWidth] = useState(300);
-  const [inspectorHeight, setInspectorHeight] = useState(300);
-  const [activeResizeHandle, setActiveResizeHandle] = useState<
-    "general" | "sidebar" | "inspector" | null
-  >(null);
-  const workspaceRef = useRef<HTMLElement | null>(null);
-  const mainPaneRef = useRef<HTMLElement | null>(null);
-  const resizeStateRef = useRef<
-    | {
-        handle: "general" | "sidebar" | "inspector";
-        startX: number;
-        startY: number;
-        startGeneralWidth: number;
-        startWidth: number;
-        startHeight: number;
-      }
-    | null
-  >(null);
-
-  useEffect(() => {
-    let unsubscribeRender: (() => void) | undefined;
-    let unsubscribeSubtitle: (() => void) | undefined;
-
-    void window.lyricVideoApp.getBootstrapData().then((data) => {
-      setBootstrap(data);
-
-      if (data.scenes[0]) {
-        setComposer((current) => ({ ...current, scene: cloneScene(data.scenes[0]) }));
-      }
-      if (data.components[0]) {
-        setComponentToAddId(data.components[0].id);
-      }
-    });
-
-    unsubscribeRender = window.lyricVideoApp.onRenderProgress((event) => {
-      setRenderDialogEntry((current) => mergeRenderEntry(current, event));
-      setIsRenderDialogOpen(true);
-      setIsSubmitting(false);
-    });
-
-    unsubscribeSubtitle = window.lyricVideoApp.onSubtitleGenerationProgress((event) => {
-      setSubtitleGenerationProgress(event);
-
-      if (event.status === "failed" || event.status === "cancelled") {
-        setIsGeneratingSubtitles(false);
-      }
-    });
-
-    return () => {
-      unsubscribeRender?.();
-      unsubscribeSubtitle?.();
-    };
-  }, []);
-
-  useEffect(() => {
-    function handlePointerMove(event: MouseEvent) {
-      const resizeState = resizeStateRef.current;
-      if (!resizeState) {
-        return;
-      }
-
-      if (resizeState.handle === "general" || resizeState.handle === "sidebar") {
-        const containerWidth = workspaceRef.current?.clientWidth ?? window.innerWidth;
-        const reservedWidth =
-          resizeState.handle === "general" ? sidebarWidth : resizeState.startGeneralWidth;
-        const maxWidth = Math.max(SIDEBAR_MIN_WIDTH, containerWidth - reservedWidth - SIDEBAR_MAX_GUTTER);
-        const nextWidth = clamp(
-          resizeState.startWidth + event.clientX - resizeState.startX,
-          SIDEBAR_MIN_WIDTH,
-          maxWidth
-        );
-
-        if (resizeState.handle === "general") {
-          setGeneralPaneWidth(nextWidth);
-          return;
-        }
-
-        setSidebarWidth(
-          clamp(
-            nextWidth,
-            SIDEBAR_MIN_WIDTH,
-            maxWidth
-          )
-        );
-        return;
-      }
-
-      const containerHeight = mainPaneRef.current?.clientHeight ?? window.innerHeight;
-      const maxHeight = Math.max(INSPECTOR_MIN_HEIGHT, containerHeight - INSPECTOR_MAX_GUTTER);
-      setInspectorHeight(
-        clamp(
-          resizeState.startHeight - (event.clientY - resizeState.startY),
-          INSPECTOR_MIN_HEIGHT,
-          maxHeight
-        )
-      );
+  const { bootstrap, setBootstrap } = useBootstrap((data) => {
+    if (data.scenes[0]) {
+      composer.setComposer((current) => ({
+        ...current,
+        scene: structuredClone(data.scenes[0])
+      }));
     }
-
-    function stopResize() {
-      resizeStateRef.current = null;
-      setActiveResizeHandle(null);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
+    if (data.components[0]) {
+      setComponentToAddId(data.components[0].id);
     }
-
-    window.addEventListener("mousemove", handlePointerMove);
-    window.addEventListener("mouseup", stopResize);
-
-    return () => {
-      window.removeEventListener("mousemove", handlePointerMove);
-      window.removeEventListener("mouseup", stopResize);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-    };
-  }, []);
+  });
+  const { selection, setSelection } = useWorkspaceSelection();
+  const composer = useComposer(setBootstrap, setSelection);
+  const renderJob = useRenderJob(setError);
+  const subtitleGeneration = useSubtitleGeneration(composer.setComposer, setError);
+  const {
+    generalPaneWidth,
+    sidebarWidth,
+    inspectorHeight,
+    activeResizeHandle,
+    workspaceRef,
+    mainPaneRef,
+    startResize
+  } = useLayoutResize();
 
   const scenes = bootstrap?.scenes ?? [];
   const components = bootstrap?.components ?? [];
-  const selectedScene = composer.scene;
+  const selectedScene = composer.composer.scene;
   const componentCatalog = useMemo(
     () => new Map(components.map((component) => [component.id, component])),
     [components]
   );
-  const builtInScenes = useMemo(() => scenes.filter((scene) => scene.source === "built-in"), [scenes]);
+  const builtInScenes = useMemo(
+    () => scenes.filter((scene) => scene.source === "built-in"),
+    [scenes]
+  );
   const userScenes = useMemo(() => scenes.filter((scene) => scene.source === "user"), [scenes]);
-  const hasActiveRender =
-    isSubmitting ||
-    (renderDialogEntry ? ACTIVE_RENDER_STATUSES.has(renderDialogEntry.status) : false);
-  const previewPaused = hasActiveRender;
   const selectedVideoSizePresetId =
     VIDEO_SIZE_PRESETS.find(
-      (preset) => preset.width === composer.video.width && preset.height === composer.video.height
+      (preset) =>
+        preset.width === composer.composer.video.width &&
+        preset.height === composer.composer.video.height
     )?.id ?? "custom";
   const selectedFpsPresetId =
-    FPS_PRESETS.find((preset) => preset.fps === composer.video.fps)?.id ?? "custom";
+    FPS_PRESETS.find((preset) => preset.fps === composer.composer.video.fps)?.id ?? "custom";
   const selectedComponent =
     selectedScene && isComponentSelection(selection)
       ? selectedScene.components.find((component) => component.id === selection.instanceId) ?? null
@@ -196,23 +74,6 @@ export function App() {
   const selectedComponentDefinition = selectedComponent
     ? componentCatalog.get(selectedComponent.componentId) ?? null
     : null;
-  const selectedComponentIndex = selectedComponent
-    ? selectedScene?.components.findIndex((component) => component.id === selectedComponent.id) ?? -1
-    : -1;
-
-  useEffect(() => {
-    if (!selectedScene || !isComponentSelection(selection)) {
-      return;
-    }
-
-    const stillExists = selectedScene.components.some(
-      (component) => component.id === selection.instanceId
-    );
-
-    if (!stillExists) {
-      setSelection({ type: "scene" });
-    }
-  }, [selection, selectedScene]);
 
   if (!bootstrap || !selectedScene) {
     return <div className="app-shell loading">Loading composer...</div>;
@@ -220,10 +81,10 @@ export function App() {
 
   async function handlePickPath(kind: FilePickKind, instanceId?: string, optionId?: string) {
     const suggestedName =
-      kind === "output" && composer.audioPath
-        ? `${stripExtension(getFileName(composer.audioPath))}.mp4`
+      kind === "output" && composer.composer.audioPath
+        ? `${stripExtension(getFileName(composer.composer.audioPath))}.mp4`
         : undefined;
-    const result = await window.lyricVideoApp.pickPath(kind, suggestedName);
+    const result = await lyricVideoApp.pickPath(kind, suggestedName);
     if (!result) {
       return;
     }
@@ -231,287 +92,37 @@ export function App() {
     setError("");
 
     if (kind === "audio") {
-      setComposer((current) => ({ ...current, audioPath: result }));
+      composer.setAudioPath(result);
       return;
     }
     if (kind === "subtitle") {
-      setComposer((current) => ({ ...current, subtitlePath: result }));
+      composer.setSubtitlePath(result);
       return;
     }
     if (kind === "lyrics-text") {
-      setSubtitleGenerationRequest((current) => ({ ...current, lyricsTextPath: result }));
+      subtitleGeneration.setRequest((current) => ({ ...current, lyricsTextPath: result }));
       return;
     }
     if (kind === "output") {
-      setComposer((current) => ({ ...current, outputPath: result }));
+      composer.setOutputPath(result);
       return;
     }
-
     if (instanceId && optionId) {
-      updateSceneComponent(instanceId, (current) => ({
+      composer.updateComponent(instanceId, (current) => ({
         ...current,
         options: { ...current.options, [optionId]: result }
       }));
     }
   }
 
-  async function handleSubmit() {
-    if (!composer.audioPath || !composer.subtitlePath || !composer.outputPath) {
-      setError("Audio, subtitles, and output path are required.");
-      return;
-    }
-
-    if (!composer.scene) {
-      setError("Select or create a scene before rendering.");
-      return;
-    }
-
-    setError("");
-    setIsSubmitting(true);
-    setIsRenderDialogOpen(true);
-    await window.lyricVideoApp.disposePreview();
-
-    try {
-      const entry = await window.lyricVideoApp.startRender({
-        audioPath: composer.audioPath,
-        subtitlePath: composer.subtitlePath,
-        outputPath: composer.outputPath,
-        scene: composer.scene,
-        video: composer.video
-      });
-      setRenderDialogEntry(entry);
-      setIsSubmitting(false);
-    } catch (submissionError) {
-      setError(submissionError instanceof Error ? submissionError.message : String(submissionError));
-      setIsSubmitting(false);
-      setIsRenderDialogOpen(false);
-    }
-  }
-
-  async function handleStartSubtitleGeneration() {
-    if (!composer.audioPath) {
-      setError("Select song audio before generating subtitles.");
-      return;
-    }
-
-    setError("");
-    setIsGeneratingSubtitles(true);
-    setSubtitleGenerationProgress({
-      status: "starting",
-      progress: 0,
-      message: "Starting subtitle generation"
-    });
-
-    try {
-      const result = await window.lyricVideoApp.startSubtitleGeneration({
-        ...subtitleGenerationRequest,
-        audioPath: composer.audioPath
-      });
-      setComposer((current) => ({ ...current, subtitlePath: result.outputPath }));
-      setSubtitleGenerationRequest((current) => ({
-        ...current,
-        outputPath: result.outputPath
-      }));
-      setSubtitleGenerationProgress({
-        status: "completed",
-        progress: 100,
-        message: "Subtitle generation complete",
-        outputPath: result.outputPath
-      });
-      setIsGeneratingSubtitles(false);
-      setIsSubtitleDialogOpen(false);
-    } catch (generationError) {
-      const message =
-        generationError instanceof Error ? generationError.message : String(generationError);
-      const isCancelled =
-        generationError instanceof DOMException && generationError.name === "AbortError";
-      setSubtitleGenerationProgress({
-        status: isCancelled ? "cancelled" : "failed",
-        progress: 0,
-        message: isCancelled ? "Subtitle generation cancelled" : "Subtitle generation failed",
-        error: isCancelled ? undefined : message
-      });
-      setIsGeneratingSubtitles(false);
-    }
-  }
-
-  async function handleCancelSubtitleGeneration() {
-    await window.lyricVideoApp.cancelSubtitleGeneration();
-    setIsGeneratingSubtitles(false);
-  }
-
-  function openSubtitleDialog() {
-    if (!composer.audioPath) {
-      setError("Select song audio before generating subtitles.");
-      return;
-    }
-
-    setSubtitleGenerationRequest((current) => ({
-      ...current,
-      audioPath: composer.audioPath
-    }));
-    setSubtitleGenerationProgress(null);
-    setIsSubtitleDialogOpen(true);
-  }
-
-  function handleSceneChange(sceneId: string) {
-    const nextScene = scenes.find((scene) => scene.id === sceneId);
-    if (!nextScene) {
-      return;
-    }
-
-    setComposer((current) => ({ ...current, scene: cloneScene(nextScene) }));
-    setSelection({ type: "scene" });
-  }
-
-  async function handleSaveScene() {
-    if (!composer.scene) {
-      return;
-    }
-
-    const saved = await window.lyricVideoApp.saveScene(composer.scene);
-    setBootstrap((current) =>
-      current ? { ...current, scenes: upsertScene(current.scenes, saved) } : current
-    );
-    setComposer((current) => ({ ...current, scene: cloneScene(saved) }));
-  }
-
-  async function handleDeleteScene() {
-    if (!composer.scene || composer.scene.source !== "user") {
-      return;
-    }
-
-    await window.lyricVideoApp.deleteScene(composer.scene.id);
-    const nextScenes = scenes.filter((scene) => scene.id !== composer.scene?.id);
-    setBootstrap((current) => (current ? { ...current, scenes: nextScenes } : current));
-    setComposer((current) => ({
-      ...current,
-      scene: nextScenes[0] ? cloneScene(nextScenes[0]) : null
-    }));
-    setSelection({ type: "scene" });
-  }
-
-  async function handleImportScene() {
-    const imported = await window.lyricVideoApp.importScene();
-    if (!imported) {
-      return;
-    }
-
-    setBootstrap((current) =>
-      current ? { ...current, scenes: upsertScene(current.scenes, imported) } : current
-    );
-    setComposer((current) => ({ ...current, scene: cloneScene(imported) }));
-    setSelection({ type: "scene" });
-  }
-
-  async function handleExportScene() {
-    if (composer.scene) {
-      await window.lyricVideoApp.exportScene(composer.scene);
-    }
-  }
-
   function handleAddComponent() {
-    if (!composer.scene || !componentToAddId) {
+    if (!componentToAddId) {
       return;
     }
-
     const component = componentCatalog.get(componentToAddId);
-    if (!component) {
-      return;
+    if (component) {
+      composer.addComponent(component);
     }
-
-    const nextInstance = createSceneComponentInstance(component);
-    setComposer((current) => ({
-      ...current,
-      scene: current.scene
-        ? {
-            ...current.scene,
-            components: [...current.scene.components, nextInstance]
-          }
-        : current.scene
-    }));
-    setSelection({ type: "component", instanceId: nextInstance.id });
-  }
-
-  function updateSceneComponent(
-    instanceId: string,
-    updater: (component: SceneComponentInstance) => SceneComponentInstance
-  ) {
-    setComposer((current) => ({
-      ...current,
-      scene: current.scene
-        ? {
-            ...current.scene,
-            components: current.scene.components.map((component) =>
-              component.id === instanceId ? updater(component) : component
-            )
-          }
-        : current.scene
-    }));
-  }
-
-  function moveSceneComponent(instanceId: string, direction: -1 | 1) {
-    setComposer((current) => {
-      if (!current.scene) {
-        return current;
-      }
-
-      const index = current.scene.components.findIndex((component) => component.id === instanceId);
-      const nextIndex = index + direction;
-      if (index < 0 || nextIndex < 0 || nextIndex >= current.scene.components.length) {
-        return current;
-      }
-
-      const nextComponents = [...current.scene.components];
-      const [component] = nextComponents.splice(index, 1);
-      nextComponents.splice(nextIndex, 0, component);
-
-      return {
-        ...current,
-        scene: { ...current.scene, components: nextComponents }
-      };
-    });
-  }
-
-  function duplicateSceneComponent(instanceId: string) {
-    if (!selectedScene) {
-      return;
-    }
-
-    const component = selectedScene.components.find((entry) => entry.id === instanceId);
-    if (!component) {
-      return;
-    }
-
-    const duplicated = { ...cloneComponent(component), id: createInstanceId(component.componentId) };
-    setComposer((current) => ({
-      ...current,
-      scene: current.scene
-        ? {
-            ...current.scene,
-            components: [...current.scene.components, duplicated]
-          }
-        : current.scene
-    }));
-    setSelection({ type: "component", instanceId: duplicated.id });
-  }
-
-  function removeSceneComponent(instanceId: string) {
-    setComposer((current) => ({
-      ...current,
-      scene: current.scene
-        ? {
-            ...current.scene,
-            components: current.scene.components.filter((component) => component.id !== instanceId)
-          }
-        : current.scene
-    }));
-
-    setSelection((current) =>
-      current.type === "component" && current.instanceId === instanceId
-        ? { type: "scene" }
-        : current
-    );
   }
 
   function renderInspector() {
@@ -520,38 +131,28 @@ export function App() {
         <SceneDetailsEditor
           builtInScenes={builtInScenes}
           userScenes={userScenes}
-          selectedScene={selectedScene!}
+          selectedScene={selectedScene}
           components={components}
           componentCatalog={componentCatalog}
-          onSceneChange={handleSceneChange}
-          onSceneNameChange={(name) =>
-            setComposer((current) => ({
-              ...current,
-              scene: current.scene ? { ...current.scene, name } : current.scene
-            }))
-          }
-          onSceneDescriptionChange={(description) =>
-            setComposer((current) => ({
-              ...current,
-              scene: current.scene ? { ...current.scene, description } : current.scene
-            }))
-          }
-          onImportScene={() => void handleImportScene()}
-          onExportScene={() => void handleExportScene()}
-          onSaveScene={() => void handleSaveScene()}
-          onDeleteScene={() => void handleDeleteScene()}
+          onSceneChange={(sceneId) => composer.selectScene(scenes, sceneId)}
+          onSceneNameChange={composer.setSceneName}
+          onSceneDescriptionChange={composer.setSceneDescription}
+          onImportScene={() => void composer.importScene()}
+          onExportScene={() => void composer.exportScene()}
+          onSaveScene={() => void composer.saveScene()}
+          onDeleteScene={() => void composer.deleteScene(scenes)}
         />
       );
     }
 
-    if (selectedComponent && selectedComponentDefinition && selectedComponentIndex >= 0) {
+    if (selectedComponent && selectedComponentDefinition) {
       return (
         <ComponentDetailsEditor
           component={selectedComponentDefinition}
           instance={selectedComponent}
-          fonts={bootstrap!.fonts}
+          fonts={bootstrap.fonts}
           onOptionChange={(optionId, value) =>
-            updateSceneComponent(selectedComponent.id, (current) => ({
+            composer.updateComponent(selectedComponent.id, (current) => ({
               ...current,
               options: { ...current.options, [optionId]: value }
             }))
@@ -564,91 +165,27 @@ export function App() {
     return null;
   }
 
-  function startResize(
-    handle: "general" | "sidebar" | "inspector",
-    event: React.MouseEvent<HTMLDivElement>
-  ) {
-    resizeStateRef.current = {
-      handle,
-      startX: event.clientX,
-      startY: event.clientY,
-      startGeneralWidth: generalPaneWidth,
-      startWidth: handle === "general" ? generalPaneWidth : sidebarWidth,
-      startHeight: inspectorHeight
-    };
-    setActiveResizeHandle(handle);
-    document.body.style.cursor = handle === "inspector" ? "row-resize" : "col-resize";
-    document.body.style.userSelect = "none";
-  }
-
   return (
     <div className={`app-shell${activeResizeHandle ? ` is-resizing-${activeResizeHandle}` : ""}`}>
       <main className="workspace-shell" ref={workspaceRef}>
         <aside className="workspace-pane workspace-general-pane" style={{ width: generalPaneWidth }}>
           <GeneralDetailsEditor
-            composer={composer}
+            composer={composer.composer}
             selectedVideoSizePresetId={selectedVideoSizePresetId}
             selectedFpsPresetId={selectedFpsPresetId}
             eyebrow="Workspace"
             className="workspace-general-panel"
             error={error}
-            isSubmitting={isSubmitting}
-            hasActiveRender={hasActiveRender}
+            isSubmitting={renderJob.isSubmitting}
+            hasActiveRender={renderJob.hasActiveRender}
             onPickPath={(kind) => void handlePickPath(kind)}
-            onOpenSubtitleGenerator={openSubtitleDialog}
-            onVideoSizePresetChange={(value) => {
-              if (value === "custom") {
-                return;
-              }
-
-              const preset = VIDEO_SIZE_PRESETS.find((entry) => entry.id === value);
-              if (!preset) {
-                return;
-              }
-
-              setComposer((current) => ({
-                ...current,
-                video: {
-                  ...current.video,
-                  width: preset.width,
-                  height: preset.height
-                }
-              }));
-            }}
-            onFpsPresetChange={(value) => {
-              if (value === "custom") {
-                return;
-              }
-
-              const preset = FPS_PRESETS.find((entry) => entry.id === value);
-              if (!preset) {
-                return;
-              }
-
-              setComposer((current) => ({
-                ...current,
-                video: { ...current.video, fps: preset.fps }
-              }));
-            }}
-            onWidthChange={(value) =>
-              setComposer((current) => ({
-                ...current,
-                video: { ...current.video, width: value }
-              }))
-            }
-            onHeightChange={(value) =>
-              setComposer((current) => ({
-                ...current,
-                video: { ...current.video, height: value }
-              }))
-            }
-            onFpsChange={(value) =>
-              setComposer((current) => ({
-                ...current,
-                video: { ...current.video, fps: value }
-              }))
-            }
-            onSubmit={() => void handleSubmit()}
+            onOpenSubtitleGenerator={() => subtitleGeneration.open(composer.composer.audioPath)}
+            onVideoSizePresetChange={composer.applyVideoSizePresetId}
+            onFpsPresetChange={composer.applyFpsPresetId}
+            onWidthChange={composer.setVideoWidth}
+            onHeightChange={composer.setVideoHeight}
+            onFpsChange={composer.setVideoFps}
+            onSubmit={() => void renderJob.submit(composer.composer)}
           />
         </aside>
 
@@ -671,14 +208,14 @@ export function App() {
             onComponentToAddIdChange={setComponentToAddId}
             onAddComponent={handleAddComponent}
             onToggleComponentEnabled={(instanceId) =>
-              updateSceneComponent(instanceId, (current) => ({
+              composer.updateComponent(instanceId, (current) => ({
                 ...current,
                 enabled: !current.enabled
               }))
             }
-            onMoveComponent={moveSceneComponent}
-            onDuplicateComponent={duplicateSceneComponent}
-            onRemoveComponent={removeSceneComponent}
+            onMoveComponent={composer.moveComponent}
+            onDuplicateComponent={composer.duplicateComponent}
+            onRemoveComponent={composer.removeComponent}
           />
         </aside>
 
@@ -693,8 +230,8 @@ export function App() {
         <section className="workspace-main-pane" ref={mainPaneRef}>
           <div className="workspace-pane workspace-preview-pane">
             <PreviewPanel
-              composer={composer}
-              paused={previewPaused}
+              composer={composer.composer}
+              paused={renderJob.hasActiveRender}
               profilerEnabled={bootstrap.previewProfilerEnabled}
             />
           </div>
@@ -714,90 +251,23 @@ export function App() {
       </main>
 
       <RenderProgressDialog
-        entry={renderDialogEntry}
-        isOpen={isRenderDialogOpen}
-        onCancelRender={(jobId) => void window.lyricVideoApp.cancelRender(jobId)}
-        onDismiss={() => {
-          setIsRenderDialogOpen(false);
-          setRenderDialogEntry(null);
-        }}
+        entry={renderJob.dialogEntry}
+        isOpen={renderJob.isDialogOpen}
+        onCancelRender={(jobId) => void renderJob.cancel(jobId)}
+        onDismiss={renderJob.dismiss}
       />
       <SubtitleGenerationDialog
-        isOpen={isSubtitleDialogOpen}
-        request={subtitleGenerationRequest}
-        progress={subtitleGenerationProgress}
-        canStart={canStartSubtitleGeneration(composer.audioPath, subtitleGenerationRequest)}
-        isGenerating={isGeneratingSubtitles}
-        onRequestChange={setSubtitleGenerationRequest}
+        isOpen={subtitleGeneration.isDialogOpen}
+        request={subtitleGeneration.request}
+        progress={subtitleGeneration.progress}
+        canStart={canStartSubtitleGeneration(composer.composer.audioPath, subtitleGeneration.request)}
+        isGenerating={subtitleGeneration.isGenerating}
+        onRequestChange={subtitleGeneration.setRequest}
         onPickLyricsText={() => void handlePickPath("lyrics-text")}
-        onStart={() => void handleStartSubtitleGeneration()}
-        onCancel={() => void handleCancelSubtitleGeneration()}
-        onDismiss={() => {
-          if (isGeneratingSubtitles) {
-            return;
-          }
-
-          setIsSubtitleDialogOpen(false);
-          setSubtitleGenerationProgress(null);
-        }}
+        onStart={() => void subtitleGeneration.start(composer.composer.audioPath)}
+        onCancel={() => void subtitleGeneration.cancel()}
+        onDismiss={subtitleGeneration.dismiss}
       />
     </div>
   );
-}
-
-function mergeRenderEntry(
-  current: RenderHistoryEntry | null,
-  event: {
-    jobId: string;
-    status: RenderHistoryEntry["status"];
-    progress: number;
-    message: string;
-    etaMs?: number;
-    renderFps?: number;
-    outputPath?: string;
-    error?: string;
-  }
-) {
-  if (!current || current.id !== event.jobId) {
-    return current;
-  }
-
-  return {
-    ...current,
-    outputPath: event.outputPath ?? current.outputPath,
-    status: Number.isFinite(event.progress) ? event.status : current.status,
-    progress: Number.isFinite(event.progress) ? event.progress : current.progress,
-    message: event.message,
-    etaMs: Number.isFinite(event.progress) ? event.etaMs : current.etaMs,
-    renderFps: Number.isFinite(event.progress) ? event.renderFps : current.renderFps,
-    error: event.error ?? current.error
-  } satisfies RenderHistoryEntry;
-}
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(Math.max(value, min), max);
-}
-
-function createInitialSubtitleGenerationRequest(): StartSubtitleGenerationRequest {
-  return {
-    mode: "transcribe",
-    audioPath: "",
-    outputPath: "",
-    language: "auto"
-  };
-}
-
-function canStartSubtitleGeneration(
-  audioPath: string,
-  request: StartSubtitleGenerationRequest
-) {
-  if (!audioPath) {
-    return false;
-  }
-
-  if (request.mode === "align") {
-    return Boolean(request.lyricsTextPath && request.language && request.language !== "auto");
-  }
-
-  return true;
 }

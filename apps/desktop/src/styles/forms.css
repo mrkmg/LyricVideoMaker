@@ -1,0 +1,132 @@
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.field {
+  display: grid;
+  gap: 0.22rem;
+}
+
+.field span {
+  color: var(--text-muted);
+}
+
+.field input,
+.field select,
+.field textarea,
+.file-pill,
+.option-input input,
+.option-input select,
+.option-input textarea {
+  width: 100%;
+  border-radius: 6px;
+  border: 1px solid var(--field-border);
+  background: var(--field-bg);
+  color: #f5f8ff;
+  min-height: 30px;
+  padding: 0.38rem 0.55rem;
+}
+
+.field input:focus,
+.field select:focus,
+.field textarea:focus,
+.option-input input:focus,
+.option-input select:focus,
+.option-input textarea:focus {
+  outline: 1px solid var(--pane-highlight);
+  border-color: var(--pane-border-strong);
+}
+
+.field select option,
+.field select optgroup,
+.option-input select option,
+.option-input select optgroup {
+  color: #111621;
+  background: #eff4ff;
+}
+
+.field textarea {
+  resize: vertical;
+  min-height: 72px;
+}
+
+.file-field {
+  align-content: start;
+}
+
+.file-field-compact {
+  gap: 0.3rem;
+  align-items: start;
+}
+
+.file-field-compact > span {
+  margin-bottom: 0.05rem;
+}
+
+.file-field-compact > button {
+  justify-self: start;
+  min-width: 5.5rem;
+}
+
+.file-pill {
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+
+.file-pill.is-empty {
+  color: var(--text-soft);
+  font-style: italic;
+}
+
+.file-field-compact .file-pill {
+  min-height: 28px;
+  padding-block: 0.25rem;
+}
+
+.primary {
+  background: linear-gradient(180deg, #81c3ff 0%, #5f9dff 100%);
+  border-color: rgba(255, 255, 255, 0.14);
+  color: #0d1724;
+  font-weight: 700;
+}
+
+.secondary {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: #eef3fb;
+}
+
+.secondary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.secondary.danger {
+  color: #ffd3d3;
+  border-color: rgba(255, 144, 144, 0.2);
+  background: rgba(255, 128, 128, 0.08);
+}
+
+.icon-button {
+  min-width: 1.95rem;
+  width: 1.95rem;
+  padding: 0.3rem;
+}
+
+.checkbox-input {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.checkbox-input input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--accent);
+}

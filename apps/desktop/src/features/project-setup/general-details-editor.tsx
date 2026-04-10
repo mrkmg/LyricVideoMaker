@@ -1,7 +1,7 @@
 import React from "react";
-import type { ComposerState } from "../composer-types";
-import type { FilePickKind } from "../electron-api";
-import { FileField, InfoTip, NumberField, SelectField } from "./form-fields";
+import type { ComposerState } from "../../state/composer-types";
+import type { FilePickKind } from "../../electron-api";
+import { FileField, InfoTip, NumberField, SelectField } from "../../components/ui/form-fields";
 
 export function GeneralDetailsEditor({
   composer,

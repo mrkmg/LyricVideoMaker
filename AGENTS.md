@@ -19,28 +19,45 @@ The app currently supports one built-in scene applied across the full song: `sin
 If you are new to the repo, read these files first:
 
 1. [package.json](./package.json)
-2. [apps/desktop/electron/main.ts](./apps/desktop/electron/main.ts)
-3. [apps/desktop/src/App.tsx](./apps/desktop/src/App.tsx)
-4. [packages/core/src/types.ts](./packages/core/src/types.ts)
-5. [packages/core/src/scenes.ts](./packages/core/src/scenes.ts)
-6. [packages/scene-registry/src/scenes/single-image-lyrics/index.ts](./packages/scene-registry/src/scenes/single-image-lyrics/index.ts)
-7. [packages/renderer/src/index.ts](./packages/renderer/src/index.ts)
+2. [apps/desktop/electron/main.ts](./apps/desktop/electron/main.ts) — slim composition entry; collaborators live under `electron/services/` and `electron/ipc/`
+3. [apps/desktop/electron/ipc/register-ipc-handlers.ts](./apps/desktop/electron/ipc/register-ipc-handlers.ts) — IPC surface, one file per feature under `electron/ipc/`
+4. [apps/desktop/src/App.tsx](./apps/desktop/src/App.tsx) — slim composition; state lives in `src/state/*`, features in `src/features/*`
+5. [packages/core/src/types.ts](./packages/core/src/types.ts)
+6. [packages/core/src/scenes.ts](./packages/core/src/scenes.ts)
+7. [packages/scene-registry/src/scenes/single-image-lyrics/index.ts](./packages/scene-registry/src/scenes/single-image-lyrics/index.ts)
+8. [packages/renderer/src/index.ts](./packages/renderer/src/index.ts)
 
-Those files show the app boundary, the UI flow, the shared scene contract, the built-in scene structure, and the render pipeline.
+Those files show the app boundary, the IPC contract, the UI composition, the shared scene contract, the built-in scene structure, and the render pipeline.
 
 ## Repo Layout
 
 ### `apps/desktop`
 
-Electron + React desktop app.
+Electron + React desktop app, organized into a layered structure on both sides of the IPC boundary.
 
-- `electron/main.ts`: owns native dialogs, bootstrap data, render submission, preview sessions, cancellation, render history, and IPC
-- `electron/preload.ts`: exposes the safe renderer API on `window.lyricVideoApp`
-- `electron/scene-library.ts`: persists user-authored scenes to app storage and handles import/export
-- `src/App.tsx`: main UI for file picking, scene selection, option editing, render submission, and render history
-- `src/electron-api.ts`: shared IPC-facing types for the renderer process
-- `src/components/*`: inspector panels, preview panel, render progress dialog, and workspace navigation
-- `vite.config.ts`: renderer-process bundling; `base: "./"` matters for `file://` startup
+#### Electron main process (`apps/desktop/electron/`)
+
+- `main.ts`: tsup entry, ~60 lines. Wires services together, registers IPC handlers, opens the main window.
+- `preload.ts`: tsup entry. Exposes the safe renderer API on `window.lyricVideoApp`.
+- `preview-worker-thread.ts`: tsup entry, ~40 lines. Worker thread bootstrap that delegates to `services/preview/worker-runtime.ts`.
+- `app/`: app lifecycle helpers — `create-window.ts`, `app-paths.ts` (sidecar root resolution), `preview-profiler.ts`.
+- `ipc/`: one file per feature, each exporting a `registerXxxHandlers(deps)` function called by `register-ipc-handlers.ts`. Files are `bootstrap-handlers`, `dialog-handlers`, `scene-handlers`, `render-handlers`, `subtitle-handlers`, `preview-handlers`. **All IPC channel strings live here** — never hardcoded in `main.ts`.
+- `services/`: behavior decoupled from IPC plumbing. `render-history.ts`, `scene-catalog.ts`, `render-job-runner.ts`, `scene-library.ts` (user scene persistence), `subtitle-generator/` (Python sidecar runner), `preview/` (`worker-client.ts`, `worker-protocol.ts`, `render-queue.ts`, `worker-runtime.ts`).
+- `shared/`: cross-cutting code linked into both the main process and the worker thread — `media-cache.ts` (shared subtitle/audio loader factories) and `clamp.ts`.
+
+#### React renderer (`apps/desktop/src/`)
+
+- `App.tsx`: slim composition. Calls hooks, computes memos, renders feature components into the workspace layout.
+- `main.tsx`: Vite entry. Imports `./styles/index.css`.
+- `electron-api.ts`: shared IPC type contracts. Source of truth for the `ElectronApi` interface and all IPC payload types — imported by both `electron/preload.ts` and renderer code.
+- `state/`: every domain hook lives here — `use-bootstrap`, `use-composer`, `use-workspace-selection`, `use-render-job`, `use-subtitle-generation`, `use-layout-resize`. Domain types `composer-types.ts` and `workspace-types.ts` live here too.
+- `features/`: one folder per feature card with the top-level component — `project-setup`, `workspace-nav`, `preview`, `scene-editor`, `component-editor`, `subtitle-generation`, `render-progress`.
+- `components/ui/form-fields.tsx`: reusable form primitives (`InfoTip`, `FieldLabel`, `NumberField`, `SelectField`, `FileField`, `OptionField`, `OptionCategorySection`).
+- `hooks/use-frame-preview.ts`: debounced preview-frame request hook with object-URL lifecycle.
+- `ipc/`: thin renderer-side wrapper. `lyric-video-app.ts` is a dynamic-lookup proxy around `window.lyricVideoApp` (so tests can mock the global). `use-render-progress.ts` and `use-subtitle-progress.ts` are tiny `useEffect` wrappers around the subscription methods.
+- `lib/`: pure non-React helpers — `composer-helpers`, `video-presets`, `path-utils`, `format`, `render-history`, `subtitle-request`, `clamp`.
+- `styles/`: monolithic CSS split into 5 cascade-ordered files — `index.css` imports `tokens.css` → `base.css` → `layout.css` → `forms.css` → `components.css`. Preserve cascade order when adding rules.
+- `vite.config.ts`: renderer-process bundling; `base: "./"` matters for `file://` startup.
 
 ### `packages/core`
 
@@ -111,6 +128,20 @@ Use this rule of thumb:
 - Change `packages/renderer` for frame rendering, browser capture, temp-file handling, audio analysis, and `ffmpeg` orchestration.
 
 If a change affects multiple layers, keep business rules in `core` and keep transport/UI details in `desktop`.
+
+### Within `apps/desktop`
+
+The desktop app is layered. Match new code to the layer that already owns its concern:
+
+- **New IPC channel:** add the type to `src/electron-api.ts`, add the bridge call in `electron/preload.ts`, add the handler in the appropriate `electron/ipc/<feature>-handlers.ts` (or create a new one and register it in `register-ipc-handlers.ts`), and add a passthrough in `src/ipc/lyric-video-app.ts`. IPC channel strings should appear in exactly one handler file plus `preload.ts`.
+- **New main-process behavior:** put it in `electron/services/`, not in `main.ts` or directly in an IPC handler. Handlers should be thin — they receive collaborators via the `IpcDeps` argument and call into services.
+- **New shared logic between main process and preview worker:** put it under `electron/shared/` (e.g. another loader factory alongside `media-cache.ts`).
+- **New renderer state slice:** add a custom hook under `src/state/`. Don't add `useState`/`useEffect` directly to `App.tsx`.
+- **New feature UI:** add a folder under `src/features/`. Don't add new files to `src/components/` — that directory is reserved for `ui/` primitives.
+- **New reusable form field:** extend `src/components/ui/form-fields.tsx`.
+- **New renderer helper:** add a focused file under `src/lib/`. Don't reintroduce a single grab-bag utility module.
+- **New styles:** add to the appropriate `src/styles/<group>.css`. Preserve the cascade order set by `src/styles/index.css`.
+- **New renderer-side IPC call:** import `lyricVideoApp` from `src/ipc/lyric-video-app.ts`. Don't reach into `window.lyricVideoApp` directly — the wrapper exists so tests can mock at the module level.
 
 ## Extension Points
 
