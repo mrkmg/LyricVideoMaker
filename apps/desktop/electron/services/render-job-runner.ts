@@ -121,9 +121,18 @@ interface HandleProgressDeps {
   getMainWindow(): BrowserWindow | null;
 }
 
+const MAX_RETAINED_LOG_ENTRIES = 500;
+
 function handleProgress({ job, event, renderHistory, getMainWindow }: HandleProgressDeps) {
   const current = renderHistory.get(job.id);
-  const nextLogs = event.logEntry ? [...(current?.logs ?? []), event.logEntry] : current?.logs;
+  let nextLogs = current?.logs;
+  if (event.logEntry) {
+    nextLogs = current?.logs ?? [];
+    nextLogs.push(event.logEntry);
+    if (nextLogs.length > MAX_RETAINED_LOG_ENTRIES) {
+      nextLogs.splice(0, nextLogs.length - MAX_RETAINED_LOG_ENTRIES);
+    }
+  }
   const hasFiniteProgress = Number.isFinite(event.progress);
   const entry: RenderHistoryEntry = {
     id: job.id,
@@ -141,10 +150,7 @@ function handleProgress({ job, event, renderHistory, getMainWindow }: HandleProg
     logs: nextLogs
   };
 
-  renderHistory.upsert({
-    ...current,
-    ...entry
-  });
+  renderHistory.upsert(entry);
 
   getMainWindow()?.webContents.send("render:progress", event);
 }

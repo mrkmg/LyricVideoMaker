@@ -2,20 +2,21 @@ import type { Writable } from "node:stream";
 import { FRAME_STAGE_TIMEOUT_MS } from "../constants";
 import type { MuxPipelineDiagnostics, RenderLogger } from "../types";
 import { formatMuxDiagnostics, traceMuxState } from "./mux-diagnostics";
+import type { MuxExitMonitor } from "./mux-exit-monitor";
 
 export async function writeFrameToMuxerInput({
   stdin,
   frame,
   logger,
   diagnostics,
-  exitPromise,
+  exitMonitor,
   timeoutMs
 }: {
   stdin: Writable;
   frame: Buffer;
   logger: RenderLogger;
   diagnostics?: MuxPipelineDiagnostics;
-  exitPromise?: Promise<void>;
+  exitMonitor?: MuxExitMonitor;
   timeoutMs: number;
 }) {
   const writeStartedAtMs = Date.now();
@@ -23,11 +24,20 @@ export async function writeFrameToMuxerInput({
     diagnostics.ffmpegLastWriteStartedAtMs = writeStartedAtMs;
   }
 
+  const earlyExitError = exitMonitor?.getExitError();
+  if (earlyExitError) {
+    throw earlyExitError;
+  }
+  if (exitMonitor?.hasExited()) {
+    throw new Error("ffmpeg exited before frame write started.");
+  }
+
   await new Promise<void>((resolve, reject) => {
     let settled = false;
     let writeCallbackCompleted = false;
     let drainCompleted = false;
     let timeoutId: NodeJS.Timeout | undefined;
+    let removeExitListener: (() => void) | undefined;
 
     const finishIfReady = () => {
       if (settled || !writeCallbackCompleted || !drainCompleted) {
@@ -60,6 +70,8 @@ export async function writeFrameToMuxerInput({
       stdin.off("drain", handleDrain);
       stdin.off("error", handleError);
       stdin.off("close", handleClose);
+      removeExitListener?.();
+      removeExitListener = undefined;
     };
 
     const handleDrain = () => {
@@ -78,10 +90,9 @@ export async function writeFrameToMuxerInput({
     stdin.on("error", handleError);
     stdin.on("close", handleClose);
 
-    if (exitPromise) {
-      void exitPromise.catch((error) => {
-        const exitError = error instanceof Error ? error : new Error(String(error));
-        fail(exitError);
+    if (exitMonitor) {
+      removeExitListener = exitMonitor.addExitListener((error) => {
+        fail(error ?? new Error("ffmpeg exited before frame write completed."));
       });
     }
 

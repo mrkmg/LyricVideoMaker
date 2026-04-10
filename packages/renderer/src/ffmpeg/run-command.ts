@@ -1,5 +1,7 @@
 import { spawn } from "node:child_process";
 import { createAbortError } from "../abort";
+import { FFMPEG_STDERR_BUFFER_LIMIT_BYTES } from "../constants";
+import { createBoundedOutputBuffer } from "./bounded-output-buffer";
 
 export async function runCommand(
   command: string,
@@ -12,7 +14,7 @@ export async function runCommand(
     });
 
     const stdout: Buffer[] = [];
-    const stderr: Buffer[] = [];
+    const stderr = createBoundedOutputBuffer(FFMPEG_STDERR_BUFFER_LIMIT_BYTES);
 
     const abortHandler = () => {
       child.kill();
@@ -22,7 +24,9 @@ export async function runCommand(
     signal?.addEventListener("abort", abortHandler, { once: true });
 
     child.stdout.on("data", (chunk) => stdout.push(Buffer.from(chunk)));
-    child.stderr.on("data", (chunk) => stderr.push(Buffer.from(chunk)));
+    child.stderr.on("data", (chunk) => {
+      stderr.append(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    });
     child.on("error", (error) => {
       signal?.removeEventListener("abort", abortHandler);
       reject(error);
@@ -34,11 +38,7 @@ export async function runCommand(
         return;
       }
 
-      reject(
-        new Error(
-          `${command} exited with code ${code}: ${Buffer.concat(stderr).toString("utf8").trim()}`
-        )
-      );
+      reject(new Error(`${command} exited with code ${code}: ${stderr.toString()}`));
     });
   });
 }
@@ -54,7 +54,7 @@ export async function runBinaryCommand(
     });
 
     const stdout: Buffer[] = [];
-    const stderr: Buffer[] = [];
+    const stderr = createBoundedOutputBuffer(FFMPEG_STDERR_BUFFER_LIMIT_BYTES);
 
     const abortHandler = () => {
       child.kill();
@@ -64,7 +64,9 @@ export async function runBinaryCommand(
     signal?.addEventListener("abort", abortHandler, { once: true });
 
     child.stdout.on("data", (chunk) => stdout.push(Buffer.from(chunk)));
-    child.stderr.on("data", (chunk) => stderr.push(Buffer.from(chunk)));
+    child.stderr.on("data", (chunk) => {
+      stderr.append(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    });
     child.on("error", (error) => {
       signal?.removeEventListener("abort", abortHandler);
       reject(error);
@@ -76,11 +78,7 @@ export async function runBinaryCommand(
         return;
       }
 
-      reject(
-        new Error(
-          `${command} exited with code ${code}: ${Buffer.concat(stderr).toString("utf8").trim()}`
-        )
-      );
+      reject(new Error(`${command} exited with code ${code}: ${stderr.toString()}`));
     });
   });
 }

@@ -2,6 +2,7 @@ import { EventEmitter } from "node:events";
 import { vi } from "vitest";
 import {
   createBoundedOutputBuffer,
+  createMuxExitMonitor,
   createOrderedFrameWriteQueue,
   renderFrameWithWorkerRecovery,
   resolveRenderParallelism,
@@ -277,6 +278,82 @@ describe("parallel rendering helpers", () => {
     stdin.emitDrain();
     await writePromise;
     expect(settled).toBe(true);
+  });
+
+  it("does not accumulate exit monitor listeners across many frame writes", async () => {
+    const logger = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn()
+    };
+    const exitMonitor = createMuxExitMonitor();
+    const totalFrames = 200;
+
+    for (let frame = 0; frame < totalFrames; frame += 1) {
+      const stdin = new FakeWritable({ acceptWrite: true });
+      const writePromise = writeFrameToMuxerInput({
+        stdin: stdin as never,
+        frame: Buffer.from(`frame-${frame}`),
+        logger,
+        exitMonitor,
+        timeoutMs: 1000
+      });
+      stdin.completeWrite();
+      await writePromise;
+    }
+
+    // After every write completes its listener must have been removed.
+    // Triggering an exit now should not invoke any leftover per-frame listener
+    // (which would have called fail() on an already-settled promise).
+    const aborts: Error[] = [];
+    exitMonitor.addExitListener((error) => {
+      if (error) aborts.push(error);
+    });
+    exitMonitor.markExited(new Error("post-render exit"));
+    expect(aborts).toHaveLength(1);
+  });
+
+  it("propagates a muxer exit to an in-flight backpressured write", async () => {
+    const logger = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn()
+    };
+    const exitMonitor = createMuxExitMonitor();
+    const stdin = new FakeWritable({ acceptWrite: false });
+
+    const writePromise = writeFrameToMuxerInput({
+      stdin: stdin as never,
+      frame: Buffer.from("frame"),
+      logger,
+      exitMonitor,
+      timeoutMs: 5000
+    });
+
+    exitMonitor.markExited(new Error("ffmpeg exited with code 1: bad input"));
+
+    await expect(writePromise).rejects.toThrow("bad input");
+  });
+
+  it("rejects immediately when the muxer has already exited before the write starts", async () => {
+    const logger = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn()
+    };
+    const exitMonitor = createMuxExitMonitor();
+    exitMonitor.markExited(new Error("ffmpeg exited with code 1: previously"));
+
+    const stdin = new FakeWritable({ acceptWrite: true });
+    await expect(
+      writeFrameToMuxerInput({
+        stdin: stdin as never,
+        frame: Buffer.from("frame"),
+        logger,
+        exitMonitor,
+        timeoutMs: 5000
+      })
+    ).rejects.toThrow("previously");
   });
 
   it("recreates a worker session and retries a frame after a timed out render stage", async () => {

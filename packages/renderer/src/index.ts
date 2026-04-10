@@ -31,3 +31,4 @@ export { createOrderedFrameWriteQueue } from "./pipeline/ordered-frame-queue";
 export { renderFrameWithWorkerRecovery } from "./pipeline/worker-frames";
 export { writeFrameToMuxerInput } from "./ffmpeg/frame-writer";
 export { createBoundedOutputBuffer } from "./ffmpeg/bounded-output-buffer";
+export { createMuxExitMonitor, type MuxExitMonitor } from "./ffmpeg/mux-exit-monitor";

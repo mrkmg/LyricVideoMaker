@@ -8,6 +8,7 @@ import {
 } from "../constants";
 import type { FrameMuxer, MuxPipelineDiagnostics, RenderLogger } from "../types";
 import { createBoundedOutputBuffer } from "./bounded-output-buffer";
+import { createMuxExitMonitor } from "./mux-exit-monitor";
 import { writeFrameToMuxerInput } from "./frame-writer";
 
 export function startFrameMuxer(
@@ -55,6 +56,7 @@ export function startFrameMuxer(
   logger.info("Spawned ffmpeg muxer process.");
 
   const stderr = createBoundedOutputBuffer(FFMPEG_STDERR_BUFFER_LIMIT_BYTES);
+  const exitMonitor = createMuxExitMonitor();
   const exitPromise = new Promise<void>((resolve, reject) => {
     child.stderr.on("data", (chunk) => {
       stderr.append(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
@@ -78,6 +80,11 @@ export function startFrameMuxer(
       );
     });
   });
+  exitPromise.then(
+    () => exitMonitor.markExited(null),
+    (error) =>
+      exitMonitor.markExited(error instanceof Error ? error : new Error(String(error)))
+  );
 
   const abortHandler = () => {
     aborted = true;
@@ -98,7 +105,7 @@ export function startFrameMuxer(
         frame,
         logger,
         diagnostics,
-        exitPromise,
+        exitMonitor,
         timeoutMs: MUX_WRITE_TIMEOUT_MS
       });
     },
