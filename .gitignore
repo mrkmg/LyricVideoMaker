@@ -28,3 +28,5 @@ Thumbs.db
 
 sidecars/subtitle-aligner/.venv/
 *.egg-info/
+
+.claude/
