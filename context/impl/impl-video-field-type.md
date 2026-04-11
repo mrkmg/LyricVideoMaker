@@ -13,8 +13,8 @@ Build site: context/plans/build-site.md
 | T-013 | DONE | Added `video` to FilePickKind and getFileFilters (mp4/webm/mov/mkv). Commit a05c0c6. |
 | T-008 | DONE | Added "video" branch to validateField; extracted validateFileField shared helper used by both image and video. Test added. Commit 897972d. |
 | T-010 | DONE | createCachedAssetBody + loadCachedAssetBody now accept kind parameter. Video path reads bytes directly + content-type from MIME. Image path unchanged. Cache-key format stable. 5 tests. Commit 897972d. |
-| T-011 | PENDING | Preload loop includes video. Tier 2. |
-| T-012 | PENDING | Asset route content-type + conditional range. Tier 3. |
+| T-011 | DONE | preloadSceneAssets flattens categories and iterates image+video field types, calls loadCachedAssetBody with kind. 3 tests. Commit 51b0ce3. |
+| T-012 | DONE | asset-routes.ts serves asset.contentType (covers mp4/webm/mov/mkv). Range support deferred to Phase-B per kit AC2. 4 tests. |
 | T-014 | DONE | OptionField and ComponentDetailsEditor now use onPickFile(fieldId, kind) unified callback. Image call sites pass "image" kind. No image-specific callback remains. Commit 897972d. |
-| T-015 | PENDING | Editor field dispatch video pill. Tier 2. |
-| T-016 | PENDING | End-to-end verification with throwaway component. Tier 4. |
+| T-015 | DONE | OptionField "video" case renders pill with onClick=onPickFile("video"). 4 jsdom tests. Commit 51b0ce3. |
+| T-016 | DONE | video-field-end-to-end.test.ts uses throwaway component declared inside the test file only (never registered in builtInSceneComponents). 5 tests. Commit f9a21bb. |
