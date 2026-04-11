@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { getFileName, stripExtension } from "./lib/path-utils";
+import { getFileName, replaceExtension, stripExtension } from "./lib/path-utils";
 import { canStartSubtitleGeneration } from "./lib/subtitle-request";
 import { lyricVideoApp } from "./ipc/lyric-video-app";
 import { useBootstrap } from "./state/use-bootstrap";
@@ -87,11 +87,16 @@ export function App() {
   const loadedSelectedScene = selectedScene;
 
   async function handlePickPath(kind: FilePickKind, instanceId?: string, optionId?: string) {
+    const outputExtension = composer.composer.render.encoding === "webm" ? "webm" : "mp4";
     const suggestedName =
       kind === "output" && composer.composer.audioPath
-        ? `${stripExtension(getFileName(composer.composer.audioPath))}.mp4`
+        ? `${stripExtension(getFileName(composer.composer.audioPath))}.${outputExtension}`
         : undefined;
-    const result = await lyricVideoApp.pickPath(kind, suggestedName);
+    const result = await lyricVideoApp.pickPath(
+      kind,
+      suggestedName,
+      kind === "output" ? composer.composer.render.encoding : undefined
+    );
     if (!result) {
       return;
     }
@@ -120,6 +125,20 @@ export function App() {
         options: { ...current.options, [optionId]: result }
       }));
     }
+  }
+
+  function handleRenderEncodingChange(encoding: typeof composer.composer.render.encoding) {
+    composer.setRenderEncoding(encoding);
+    composer.setComposer((current) => {
+      if (!current.outputPath) {
+        return current;
+      }
+      const extension = encoding === "webm" ? "webm" : "mp4";
+      return {
+        ...current,
+        outputPath: replaceExtension(current.outputPath, extension)
+      };
+    });
   }
 
   function handleAddComponent() {
@@ -192,6 +211,9 @@ export function App() {
             onWidthChange={composer.setVideoWidth}
             onHeightChange={composer.setVideoHeight}
             onFpsChange={composer.setVideoFps}
+            onRenderThreadsChange={composer.setRenderThreads}
+            onRenderEncodingChange={handleRenderEncodingChange}
+            onRenderQualityChange={composer.setRenderQuality}
             onSubmit={() => void renderJob.submit(composer.composer)}
           />
         </aside>

@@ -47,6 +47,12 @@ export function useRenderJob(onError: (message: string) => void): RenderJobState
         return;
       }
 
+      const requiredExtension = composer.render.encoding === "webm" ? ".webm" : ".mp4";
+      if (!composer.outputPath.toLowerCase().endsWith(requiredExtension)) {
+        onError(`Output path must end with ${requiredExtension} for ${composer.render.encoding}.`);
+        return;
+      }
+
       onError("");
       setIsSubmitting(true);
       setIsDialogOpen(true);
@@ -58,7 +64,8 @@ export function useRenderJob(onError: (message: string) => void): RenderJobState
           subtitlePath: composer.subtitlePath,
           outputPath: composer.outputPath,
           scene: composer.scene,
-          video: composer.video
+          video: composer.video,
+          render: composer.render
         });
         setDialogEntry(entry);
         setIsSubmitting(false);

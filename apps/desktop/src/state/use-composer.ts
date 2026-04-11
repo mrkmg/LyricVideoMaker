@@ -1,5 +1,7 @@
 import { useCallback, useState } from "react";
 import type {
+  RenderEncoding,
+  RenderQuality,
   SceneComponentInstance,
   SerializedSceneComponentDefinition,
   SerializedSceneDefinition
@@ -31,6 +33,9 @@ export interface ComposerActions {
   setVideoWidth(value: number): void;
   setVideoHeight(value: number): void;
   setVideoFps(value: number): void;
+  setRenderThreads(value: number): void;
+  setRenderEncoding(value: RenderEncoding): void;
+  setRenderQuality(value: RenderQuality): void;
   selectScene(scenes: SerializedSceneDefinition[], sceneId: string): void;
   saveScene(): Promise<void>;
   deleteScene(scenes: SerializedSceneDefinition[]): Promise<void>;
@@ -122,6 +127,27 @@ export function useComposer(
 
   const setVideoFps = useCallback((value: number) => {
     setComposer((current) => ({ ...current, video: { ...current.video, fps: value } }));
+  }, []);
+
+  const setRenderThreads = useCallback((value: number) => {
+    setComposer((current) => ({
+      ...current,
+      render: { ...current.render, threads: Math.max(1, Math.floor(value || 1)) }
+    }));
+  }, []);
+
+  const setRenderEncoding = useCallback((value: RenderEncoding) => {
+    setComposer((current) => ({
+      ...current,
+      render: { ...current.render, encoding: value }
+    }));
+  }, []);
+
+  const setRenderQuality = useCallback((value: RenderQuality) => {
+    setComposer((current) => ({
+      ...current,
+      render: { ...current.render, quality: value }
+    }));
   }, []);
 
   const selectScene = useCallback(
@@ -299,6 +325,9 @@ export function useComposer(
     setVideoWidth,
     setVideoHeight,
     setVideoFps,
+    setRenderThreads,
+    setRenderEncoding,
+    setRenderQuality,
     selectScene,
     saveScene,
     deleteScene,

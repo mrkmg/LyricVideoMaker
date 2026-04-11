@@ -1,4 +1,5 @@
 import React from "react";
+import type { RenderEncoding, RenderQuality } from "@lyric-video-maker/core";
 import type { ComposerState } from "../../state/composer-types";
 import type { FilePickKind } from "../../electron-api";
 import { FileField, InfoTip, NumberField, SelectField } from "../../components/ui/form-fields";
@@ -19,6 +20,9 @@ export function GeneralDetailsEditor({
   onWidthChange,
   onHeightChange,
   onFpsChange,
+  onRenderThreadsChange,
+  onRenderEncodingChange,
+  onRenderQualityChange,
   onSubmit
 }: {
   composer: ComposerState;
@@ -36,8 +40,14 @@ export function GeneralDetailsEditor({
   onWidthChange: (value: number) => void;
   onHeightChange: (value: number) => void;
   onFpsChange: (value: number) => void;
+  onRenderThreadsChange: (value: number) => void;
+  onRenderEncodingChange: (value: RenderEncoding) => void;
+  onRenderQualityChange: (value: RenderQuality) => void;
   onSubmit: () => void | Promise<void>;
 }) {
+  const qualityOptions = getQualityOptions(composer.render.encoding);
+  const outputExtension = composer.render.encoding === "webm" ? "WebM" : "MP4";
+
   return (
     <section className={`panel inspector-panel ${className}`.trim()}>
       <div className="panel-header">
@@ -96,12 +106,50 @@ export function GeneralDetailsEditor({
                 </div>
               </div>
               <FileField
-                label="Output MP4"
-                helpText="Choose where the rendered MP4 will be written."
+                label={`Output ${outputExtension}`}
+                helpText={`Choose where the rendered ${outputExtension} will be written.`}
                 value={composer.outputPath}
                 buttonLabel="Save As"
                 compact
                 onPick={() => onPickPath("output")}
+              />
+            </div>
+          </section>
+
+          <section className="inspector-section general-output-section">
+            <div className="inspector-section-header">
+              <div className="section-title-row">
+                <h3>Output / Render</h3>
+                <InfoTip text="Set render worker count, encoder, and encoder quality preset." />
+              </div>
+            </div>
+
+            <div className="inspector-grid general-output-grid">
+              <NumberField
+                label="Render threads"
+                helpText="Chromium frame-render workers. Higher can render faster but uses more memory."
+                value={composer.render.threads}
+                min={1}
+                step={1}
+                onChange={onRenderThreadsChange}
+              />
+              <SelectField
+                label="Encoding"
+                helpText="x264 and x265 write MP4. WebM writes VP9/Opus WebM."
+                value={composer.render.encoding}
+                options={[
+                  { value: "x264", label: "x264 (MP4 / H.264)" },
+                  { value: "x265", label: "x265 (MP4 / H.265)" },
+                  { value: "webm", label: "WebM (VP9 / Opus)" }
+                ]}
+                onChange={(value) => onRenderEncodingChange(value as RenderEncoding)}
+              />
+              <SelectField
+                label="Quality"
+                helpText={qualityOptions.helpText}
+                value={composer.render.quality}
+                options={qualityOptions.options}
+                onChange={(value) => onRenderQualityChange(value as RenderQuality)}
               />
             </div>
           </section>
@@ -175,7 +223,7 @@ export function GeneralDetailsEditor({
         <div className="inspector-section-header">
           <div className="section-title-row">
             <h3>Render</h3>
-            <InfoTip text="Start the MP4 render with the current files, scene, and video settings." />
+            <InfoTip text="Start the render with the current files, scene, video, and output settings." />
           </div>
         </div>
 
@@ -188,10 +236,46 @@ export function GeneralDetailsEditor({
             disabled={isSubmitting || hasActiveRender}
             onClick={onSubmit}
           >
-            {isSubmitting || hasActiveRender ? "Rendering..." : "Render MP4"}
+            {isSubmitting || hasActiveRender ? "Rendering..." : `Render ${outputExtension}`}
           </button>
         </div>
       </section>
     </section>
   );
+}
+
+function getQualityOptions(encoding: RenderEncoding): {
+  helpText: string;
+  options: Array<{ value: RenderQuality; label: string }>;
+} {
+  if (encoding === "webm") {
+    return {
+      helpText: "VP9 quality preset. Smaller files take less space; high quality takes longer.",
+      options: [
+        { value: "speed", label: "Smaller file (CRF 38, faster)" },
+        { value: "balanced", label: "Balanced (CRF 32)" },
+        { value: "quality", label: "High quality (CRF 28, slower)" }
+      ]
+    };
+  }
+
+  if (encoding === "x265") {
+    return {
+      helpText: "H.265 quality preset. Lower CRF gives higher quality and larger files.",
+      options: [
+        { value: "speed", label: "Smaller file (CRF 32, faster)" },
+        { value: "balanced", label: "Balanced (CRF 28)" },
+        { value: "quality", label: "High quality (CRF 23, slower)" }
+      ]
+    };
+  }
+
+  return {
+    helpText: "H.264 quality preset. Lower CRF gives higher quality and larger files.",
+    options: [
+      { value: "speed", label: "Smaller file (CRF 28, faster)" },
+      { value: "balanced", label: "Balanced (CRF 23)" },
+      { value: "quality", label: "High quality (CRF 18, slower)" }
+    ]
+  };
 }

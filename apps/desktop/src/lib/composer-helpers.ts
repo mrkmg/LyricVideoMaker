@@ -4,6 +4,9 @@ import type {
   SerializedSceneDefinition
 } from "@lyric-video-maker/core";
 import {
+  DEFAULT_RENDER_ENCODING,
+  DEFAULT_RENDER_QUALITY,
+  DEFAULT_RENDER_THREADS,
   DEFAULT_VIDEO_FPS,
   DEFAULT_VIDEO_HEIGHT,
   DEFAULT_VIDEO_WIDTH
@@ -19,6 +22,11 @@ export const emptyComposerState: ComposerState = {
     width: DEFAULT_VIDEO_WIDTH,
     height: DEFAULT_VIDEO_HEIGHT,
     fps: DEFAULT_VIDEO_FPS
+  },
+  render: {
+    threads: DEFAULT_RENDER_THREADS,
+    encoding: DEFAULT_RENDER_ENCODING,
+    quality: DEFAULT_RENDER_QUALITY
   }
 };
 

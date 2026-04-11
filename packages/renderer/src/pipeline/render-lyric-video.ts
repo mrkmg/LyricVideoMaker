@@ -139,7 +139,7 @@ export async function renderLyricVideo({
       prepared
     });
     const workerCount = resolveRenderParallelism({
-      parallelism,
+      parallelism: parallelism ?? job.render.threads,
       totalFrames: job.video.durationInFrames
     });
 

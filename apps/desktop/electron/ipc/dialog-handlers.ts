@@ -1,20 +1,25 @@
 import { dialog, ipcMain } from "electron";
 import type { FilePickKind } from "../../src/electron-api";
+import type { RenderEncoding } from "@lyric-video-maker/core";
 import type { IpcDeps } from "./register-ipc-handlers";
 
 export function registerDialogHandlers({ getMainWindow }: IpcDeps) {
   ipcMain.handle(
     "dialog:pick-path",
-    async (_event, args: { kind: FilePickKind; suggestedName?: string }) => {
+    async (
+      _event,
+      args: { kind: FilePickKind; suggestedName?: string; outputEncoding?: RenderEncoding }
+    ) => {
       const mainWindow = getMainWindow();
       if (!mainWindow) {
         return null;
       }
 
       if (args.kind === "output") {
+        const outputFilter = getOutputFileFilter(args.outputEncoding ?? "x264");
         const result = await dialog.showSaveDialog(mainWindow, {
-          defaultPath: args.suggestedName ?? "lyric-video.mp4",
-          filters: [{ name: "MP4 Video", extensions: ["mp4"] }]
+          defaultPath: args.suggestedName ?? `lyric-video.${outputFilter.extensions[0]}`,
+          filters: [outputFilter, { name: "All Video Files", extensions: ["mp4", "webm"] }]
         });
 
         return result.canceled ? null : result.filePath;
@@ -29,6 +34,14 @@ export function registerDialogHandlers({ getMainWindow }: IpcDeps) {
       return result.canceled ? null : result.filePaths[0] ?? null;
     }
   );
+}
+
+function getOutputFileFilter(encoding: RenderEncoding) {
+  if (encoding === "webm") {
+    return { name: "WebM Video", extensions: ["webm"] };
+  }
+
+  return { name: "MP4 Video", extensions: ["mp4"] };
 }
 
 function getFileFilters(kind: FilePickKind) {

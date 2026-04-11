@@ -8,7 +8,8 @@ import type { ElectronApi } from "../electron-api";
  */
 export const lyricVideoApp: ElectronApi = {
   getBootstrapData: () => window.lyricVideoApp.getBootstrapData(),
-  pickPath: (kind, suggestedName) => window.lyricVideoApp.pickPath(kind, suggestedName),
+  pickPath: (kind, suggestedName, outputEncoding) =>
+    window.lyricVideoApp.pickPath(kind, suggestedName, outputEncoding),
   startRender: (request) => window.lyricVideoApp.startRender(request),
   renderPreviewFrame: (request) => window.lyricVideoApp.renderPreviewFrame(request),
   startSubtitleGeneration: (request) => window.lyricVideoApp.startSubtitleGeneration(request),

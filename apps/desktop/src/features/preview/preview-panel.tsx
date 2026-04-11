@@ -39,7 +39,7 @@ export function PreviewPanel({
           <p className="eyebrow">Preview</p>
           <div className="panel-title-row">
             <h2>Frame Preview</h2>
-            <InfoTip text="Scrub a single rendered frame before starting a full MP4 render." />
+            <InfoTip text="Scrub a single rendered frame before starting a full render." />
           </div>
         </div>
         <div className="preview-status-block">
@@ -119,7 +119,7 @@ export function PreviewPanel({
 
       <div className="preview-controls">
         {paused ? (
-          <p className="video-param-hint">Preview is paused while the MP4 render is running.</p>
+          <p className="video-param-hint">Preview is paused while the render is running.</p>
         ) : null}
         {preview.error ? <p className="error-banner">{preview.error}</p> : null}
 

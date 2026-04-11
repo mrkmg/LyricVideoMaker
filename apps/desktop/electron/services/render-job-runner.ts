@@ -50,6 +50,7 @@ export function buildRenderJob({ request, cues, durationMs }: BuildRenderJobOpti
     cues,
     durationMs,
     video: request.video,
+    render: request.render,
     validationContext: {
       isFileAccessible: existsSync
     }

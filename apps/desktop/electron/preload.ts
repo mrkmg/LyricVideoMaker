@@ -3,7 +3,8 @@ import type { ElectronApi } from "../src/electron-api";
 
 const api: ElectronApi = {
   getBootstrapData: () => ipcRenderer.invoke("app:get-bootstrap-data"),
-  pickPath: (kind, suggestedName) => ipcRenderer.invoke("dialog:pick-path", { kind, suggestedName }),
+  pickPath: (kind, suggestedName, outputEncoding) =>
+    ipcRenderer.invoke("dialog:pick-path", { kind, suggestedName, outputEncoding }),
   startRender: (request) => ipcRenderer.invoke("render:start", request),
   renderPreviewFrame: (request) => ipcRenderer.invoke("preview:render-frame", request),
   startSubtitleGeneration: (request) => ipcRenderer.invoke("subtitle:start-generation", request),

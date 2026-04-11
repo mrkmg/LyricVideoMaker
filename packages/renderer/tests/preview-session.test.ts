@@ -257,6 +257,7 @@ function createJob(
       durationMs: 2000,
       durationInFrames: 60
     },
+    render: { threads: 4, encoding: "x264", quality: "balanced" },
     lyrics: [],
     createdAt: new Date().toISOString()
   };

@@ -1,7 +1,10 @@
 import {
   DEFAULT_VIDEO_FPS,
   DEFAULT_VIDEO_HEIGHT,
-  DEFAULT_VIDEO_WIDTH
+  DEFAULT_VIDEO_WIDTH,
+  DEFAULT_RENDER_ENCODING,
+  DEFAULT_RENDER_QUALITY,
+  DEFAULT_RENDER_THREADS
 } from "../constants";
 import { createLyricRuntime } from "../timeline/runtime";
 import { durationMsToFrameCount } from "../timeline/frame-time";
@@ -18,6 +21,7 @@ export function createRenderJob({
   durationMs,
   createdAt = new Date(),
   video,
+  render,
   validationContext
 }: CreateRenderJobInput): RenderJob {
   const fps = video?.fps ?? DEFAULT_VIDEO_FPS;
@@ -41,6 +45,11 @@ export function createRenderJob({
       fps,
       durationMs,
       durationInFrames: durationMsToFrameCount(durationMs, fps)
+    },
+    render: {
+      threads: render?.threads ?? DEFAULT_RENDER_THREADS,
+      encoding: render?.encoding ?? DEFAULT_RENDER_ENCODING,
+      quality: render?.quality ?? DEFAULT_RENDER_QUALITY
     }
   };
 }

@@ -19,6 +19,7 @@ export function startFrameMuxer(
 ): FrameMuxer {
   let aborted = false;
   let finished = false;
+  const outputArgs = getOutputArgs(job);
 
   const child = spawn(
     FFMPEG_EXECUTABLE,
@@ -34,14 +35,7 @@ export function startFrameMuxer(
       "-",
       "-i",
       job.audioPath,
-      "-c:v",
-      "libx264",
-      "-pix_fmt",
-      "yuv420p",
-      "-c:a",
-      "aac",
-      "-movflags",
-      "+faststart",
+      ...outputArgs,
       "-shortest",
       job.outputPath
     ],
@@ -142,5 +136,130 @@ export function startFrameMuxer(
 
   function cleanup() {
     signal?.removeEventListener("abort", abortHandler);
+  }
+}
+
+function getOutputArgs(job: RenderJob) {
+  switch (job.render.encoding) {
+    case "x265":
+      return [
+        "-c:v",
+        "libx265",
+        "-preset",
+        getX265Preset(job.render.quality),
+        "-crf",
+        getX265Crf(job.render.quality),
+        "-pix_fmt",
+        "yuv420p",
+        "-tag:v",
+        "hvc1",
+        "-c:a",
+        "aac",
+        "-movflags",
+        "+faststart"
+      ];
+    case "webm":
+      return [
+        "-c:v",
+        "libvpx-vp9",
+        "-crf",
+        getWebmCrf(job.render.quality),
+        "-b:v",
+        "0",
+        "-cpu-used",
+        getWebmCpuUsed(job.render.quality),
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "libopus"
+      ];
+    case "x264":
+    default:
+      return [
+        "-c:v",
+        "libx264",
+        "-preset",
+        getX264Preset(job.render.quality),
+        "-crf",
+        getX264Crf(job.render.quality),
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-movflags",
+        "+faststart"
+      ];
+  }
+}
+
+function getX264Preset(quality: RenderJob["render"]["quality"]) {
+  switch (quality) {
+    case "speed":
+      return "veryfast";
+    case "quality":
+      return "slow";
+    case "balanced":
+    default:
+      return "medium";
+  }
+}
+
+function getX264Crf(quality: RenderJob["render"]["quality"]) {
+  switch (quality) {
+    case "speed":
+      return "28";
+    case "quality":
+      return "18";
+    case "balanced":
+    default:
+      return "23";
+  }
+}
+
+function getX265Preset(quality: RenderJob["render"]["quality"]) {
+  switch (quality) {
+    case "speed":
+      return "fast";
+    case "quality":
+      return "slow";
+    case "balanced":
+    default:
+      return "medium";
+  }
+}
+
+function getX265Crf(quality: RenderJob["render"]["quality"]) {
+  switch (quality) {
+    case "speed":
+      return "32";
+    case "quality":
+      return "23";
+    case "balanced":
+    default:
+      return "28";
+  }
+}
+
+function getWebmCrf(quality: RenderJob["render"]["quality"]) {
+  switch (quality) {
+    case "speed":
+      return "38";
+    case "quality":
+      return "28";
+    case "balanced":
+    default:
+      return "32";
+  }
+}
+
+function getWebmCpuUsed(quality: RenderJob["render"]["quality"]) {
+  switch (quality) {
+    case "speed":
+      return "6";
+    case "quality":
+      return "2";
+    case "balanced":
+    default:
+      return "4";
   }
 }

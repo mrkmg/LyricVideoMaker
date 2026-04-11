@@ -31,6 +31,7 @@ const job: RenderJob = {
   sceneName: "Scene",
   components: [videoComponent],
   video: { width: 1920, height: 1080, fps: 30, durationMs: 1000, durationInFrames: 30 },
+  render: { threads: 4, encoding: "x264", quality: "balanced" },
   lyrics: [],
   createdAt: "2026-01-01T00:00:00.000Z"
 };

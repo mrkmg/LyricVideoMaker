@@ -10,7 +10,6 @@ export function resolveRenderParallelism({
 }) {
   const requested =
     normalizePositiveInteger(parallelism) ??
-    normalizePositiveInteger(process.env.LYRIC_VIDEO_RENDER_WORKERS) ??
     Math.min(8, Math.max(1, Math.floor(availableParallelism() - 1)));
   const maxWorkersFromFrames = Math.max(1, Math.floor(totalFrames / 2));
 

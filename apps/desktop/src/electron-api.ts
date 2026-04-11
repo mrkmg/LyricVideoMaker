@@ -1,6 +1,8 @@
 import type {
   LyricCue,
+  RenderEncoding,
   RenderHistoryEntry,
+  RenderOutputSettings,
   RenderProgressEvent,
   SerializedSceneComponentDefinition,
   SerializedSceneDefinition,
@@ -55,6 +57,7 @@ export interface StartRenderRequest {
   outputPath: string;
   scene: SerializedSceneDefinition;
   video?: Partial<Pick<VideoSettings, "width" | "height" | "fps">>;
+  render?: Partial<RenderOutputSettings>;
 }
 
 export interface RenderPreviewRequest {
@@ -78,7 +81,11 @@ export interface RenderPreviewResponse {
 
 export interface ElectronApi {
   getBootstrapData(): Promise<AppBootstrapData>;
-  pickPath(kind: FilePickKind, suggestedName?: string): Promise<string | null>;
+  pickPath(
+    kind: FilePickKind,
+    suggestedName?: string,
+    outputEncoding?: RenderEncoding
+  ): Promise<string | null>;
   startRender(request: StartRenderRequest): Promise<RenderHistoryEntry>;
   renderPreviewFrame(request: RenderPreviewRequest): Promise<RenderPreviewResponse>;
   startSubtitleGeneration(request: StartSubtitleGenerationRequest): Promise<SubtitleGenerationResult>;

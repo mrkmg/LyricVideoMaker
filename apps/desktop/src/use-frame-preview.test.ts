@@ -185,7 +185,8 @@ function createComposer(): ComposerState {
       width: 1920,
       height: 1080,
       fps: 30
-    }
+    },
+    render: { threads: 4, encoding: "x264", quality: "balanced" }
   };
 }
 

@@ -10,19 +10,7 @@ import {
 } from "../src/index";
 
 describe("parallel rendering helpers", () => {
-  const originalWorkerEnv = process.env.LYRIC_VIDEO_RENDER_WORKERS;
-
-  afterEach(() => {
-    if (originalWorkerEnv === undefined) {
-      delete process.env.LYRIC_VIDEO_RENDER_WORKERS;
-    } else {
-      process.env.LYRIC_VIDEO_RENDER_WORKERS = originalWorkerEnv;
-    }
-  });
-
-  it("resolves worker counts from explicit input and environment overrides", () => {
-    process.env.LYRIC_VIDEO_RENDER_WORKERS = "8";
-
+  it("resolves worker counts from explicit input and default CPU fallback", () => {
     expect(resolveRenderParallelism({ parallelism: 3, totalFrames: 20 })).toBe(3);
     expect(resolveRenderParallelism({ totalFrames: 9 })).toBe(4);
     expect(resolveRenderParallelism({ totalFrames: 1 })).toBe(1);

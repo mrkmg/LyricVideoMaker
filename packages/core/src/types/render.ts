@@ -7,6 +7,15 @@ import type {
 import type { SceneValidationContext } from "./scene-options";
 import type { VideoSettings } from "./video";
 
+export type RenderEncoding = "x264" | "x265" | "webm";
+export type RenderQuality = "speed" | "balanced" | "quality";
+
+export interface RenderOutputSettings {
+  threads: number;
+  encoding: RenderEncoding;
+  quality: RenderQuality;
+}
+
 export interface RenderJob {
   id: string;
   audioPath: string;
@@ -16,6 +25,7 @@ export interface RenderJob {
   sceneName: string;
   components: ValidatedSceneComponentInstance[];
   video: VideoSettings;
+  render: RenderOutputSettings;
   lyrics: LyricCue[];
   createdAt: string;
 }
@@ -74,5 +84,6 @@ export interface CreateRenderJobInput {
   durationMs: number;
   createdAt?: Date;
   video?: Partial<Pick<VideoSettings, "width" | "height" | "fps">>;
+  render?: Partial<RenderOutputSettings>;
   validationContext?: SceneValidationContext;
 }
