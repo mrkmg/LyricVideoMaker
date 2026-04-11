@@ -230,6 +230,8 @@ export interface ReadinessTimeoutEvent {
  *   - window.__frameReadiness  — the per-frame readiness gate (T-042, R1)
  *   - window.__syncVideoElement — helper to seek a <video> to a target
  *                                 time and return a readiness promise (T-044)
+ *   - window.__syncImageFrameElement — helper to swap an <img> source and
+ *                                      return a readiness promise
  *   - window.__frameReadinessSetCurrentFrame — internal hook so the frame
  *                                               loop records which frame is
  *                                               active when a timeout fires
@@ -386,6 +388,43 @@ export const FRAME_READINESS_SCRIPT_SOURCE = `
       }, VIDEO_SEEK_TIMEOUT_MS);
     });
   };
+
+  window.__syncImageFrameElement = function syncImageFrameElement(image, src, label) {
+    if (!image || typeof src !== "string" || !src) {
+      return null;
+    }
+    if ((image.currentSrc === src || image.src === src) && image.complete && image.naturalWidth > 0) {
+      return null;
+    }
+    return new Promise(function(resolve) {
+      var settled = false;
+      function finish() {
+        if (settled) return;
+        settled = true;
+        image.removeEventListener("load", onLoad);
+        image.removeEventListener("error", onError);
+        resolve();
+      }
+      function onLoad() {
+        if (typeof image.decode === "function") {
+          image.decode().then(finish, finish);
+          return;
+        }
+        finish();
+      }
+      function onError() { finish(); }
+      image.addEventListener("load", onLoad, { once: true });
+      image.addEventListener("error", onError, { once: true });
+      try {
+        image.src = src;
+        if (image.complete) {
+          onLoad();
+        }
+      } catch (error) {
+        finish();
+      }
+    });
+  };
 `;
 
 export function renderPageShell(): string {
@@ -452,7 +491,9 @@ export function renderPageShell(): string {
 
         function waitForAssets(root) {
           const warnings = [];
-          const pendingImages = Array.from(root.querySelectorAll("img"));
+          const pendingImages = Array.from(root.querySelectorAll("img")).filter(
+            (image) => !image.hasAttribute("data-video-frame")
+          );
 
           const waitForImages = pendingImages.length > 0
             ? Promise.all(
@@ -1060,6 +1101,22 @@ export function renderPageShell(): string {
                 const readiness = window.__syncVideoElement(
                   videos[i],
                   videoSync.targetTimeSeconds,
+                  label
+                );
+                if (readiness) {
+                  window.__frameReadiness.register(readiness, label);
+                }
+              }
+            }
+
+            const imageFrameSync = state.__imageFrameSync;
+            if (imageFrameSync && typeof imageFrameSync === "object" && typeof imageFrameSync.src === "string") {
+              const images = mounted.layer.querySelectorAll("img[data-video-frame]");
+              for (let i = 0; i < images.length; i += 1) {
+                const label = imageFrameSync.label || (component.instanceId + ":image-frame");
+                const readiness = window.__syncImageFrameElement(
+                  images[i],
+                  imageFrameSync.src,
                   label
                 );
                 if (readiness) {

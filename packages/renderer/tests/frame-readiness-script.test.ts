@@ -44,6 +44,35 @@ class FakeVideo {
   }
 }
 
+class FakeImage {
+  public src = "";
+  public currentSrc = "";
+  public complete = false;
+  public naturalWidth = 0;
+  public decode = vi.fn(async () => undefined);
+  private listeners = new Map<string, Array<(event?: unknown) => void>>();
+
+  addEventListener(event: string, handler: (event?: unknown) => void, _options?: unknown) {
+    const list = this.listeners.get(event) ?? [];
+    list.push(handler);
+    this.listeners.set(event, list);
+  }
+
+  removeEventListener(event: string, handler: (event?: unknown) => void) {
+    const list = this.listeners.get(event);
+    if (!list) return;
+    this.listeners.set(event, list.filter((h) => h !== handler));
+  }
+
+  dispatchLoad() {
+    this.complete = true;
+    this.naturalWidth = 10;
+    this.currentSrc = this.src;
+    const list = this.listeners.get("load") ?? [];
+    list.slice().forEach((handler) => handler());
+  }
+}
+
 interface FakeWindow {
   __frameReadiness: {
     register(task: Promise<unknown>, label?: string): void;
@@ -53,6 +82,11 @@ interface FakeWindow {
   __syncVideoElement: (
     video: FakeVideo,
     targetTimeSeconds: number,
+    label?: string
+  ) => Promise<void> | null;
+  __syncImageFrameElement: (
+    image: FakeImage,
+    src: string,
     label?: string
   ) => Promise<void> | null;
   __frameReadinessSetCurrentFrame: (frame: number) => void;
@@ -201,6 +235,44 @@ describe("__syncVideoElement — live-DOM seek handler (T-044)", () => {
     videoB.dispatchSeeked();
     await all;
     expect(resolved).toBe(true);
+  });
+});
+
+describe("__syncImageFrameElement — live-DOM image sequence handler", () => {
+  it("returns null when same source is already decoded", () => {
+    const w = installScript();
+    const image = new FakeImage();
+    image.src = "http://lyric-video.local/video-frames/a/frame-00000001.jpg";
+    image.currentSrc = image.src;
+    image.complete = true;
+    image.naturalWidth = 10;
+
+    const readiness = w.__syncImageFrameElement(image, image.src, "frame-a");
+
+    expect(readiness).toBeNull();
+  });
+
+  it("changes src and waits for load/decode before readiness settles", async () => {
+    const w = installScript();
+    const image = new FakeImage();
+    const nextSrc = "http://lyric-video.local/video-frames/a/frame-00000002.jpg";
+
+    const readiness = w.__syncImageFrameElement(image, nextSrc, "frame-b");
+    expect(readiness).not.toBeNull();
+    expect(image.src).toBe(nextSrc);
+    w.__frameReadiness.register(readiness!, "frame-b");
+
+    let settled = false;
+    const all = w.__frameReadiness.awaitAll().then(() => {
+      settled = true;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(settled).toBe(false);
+
+    image.dispatchLoad();
+    await all;
+    expect(image.decode).toHaveBeenCalled();
+    expect(settled).toBe(true);
   });
 });
 

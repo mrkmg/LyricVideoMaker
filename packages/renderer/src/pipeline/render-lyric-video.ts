@@ -9,7 +9,7 @@ import { isAbortError, throwIfAborted } from "../abort";
 import { createAudioAnalysisAccessor } from "../audio-analysis";
 import { createAssetAccessor, preloadSceneAssets } from "../assets/preload";
 import { createLiveDomRenderSession } from "../browser/live-dom-session";
-import { PROGRESS_INTERVAL_MS } from "../constants";
+import { isVideoFrameExtractionEnabled, PROGRESS_INTERVAL_MS } from "../constants";
 import { startFrameMuxer } from "../ffmpeg/frame-muxer";
 import { createMuxPipelineDiagnostics } from "../ffmpeg/mux-diagnostics";
 import { canRenderWithLiveDom, createLiveDomScenePayload } from "../live-dom";
@@ -27,6 +27,12 @@ import { createOrderedFrameWriteQueue } from "./ordered-frame-queue";
 import { createProgressEmitter } from "./progress";
 import { resolveRenderParallelism } from "./parallelism";
 import { renderWorkerFrames } from "./worker-frames";
+import {
+  cleanupVideoFrameExtractions,
+  prepareVideoFrameExtractions,
+  renderUsesVideoComponents,
+  type VideoFrameExtractionEntry
+} from "../video-frame-extraction";
 
 export interface RenderLyricVideoInput {
   job: RenderJob;
@@ -67,6 +73,7 @@ export async function renderLyricVideo({
   let muxerFinished = false;
   let workerFailure: unknown = null;
   const workerHandles: FramePreviewWorkerHandle[] = [];
+  let videoFrameExtractions: VideoFrameExtractionEntry[] = [];
   const muxDiagnostics = createMuxPipelineDiagnostics();
   try {
     throwIfAborted(renderSignal);
@@ -100,6 +107,11 @@ export async function renderLyricVideo({
     logger.info(
       `Starting render at ${job.video.width}x${job.video.height} ${job.video.fps}fps with ${job.video.durationInFrames} frames.`
     );
+    if (renderUsesVideoComponents(enabledComponents)) {
+      logger.info(
+        `Phase B video frame extraction flag is ${isVideoFrameExtractionEnabled() ? "active" : "inactive"}.`
+      );
+    }
 
     const initialLyricsRuntime = createLyricRuntime(job.lyrics, 0);
     const prepared =
@@ -113,6 +125,19 @@ export async function renderLyricVideo({
           logger
         });
       })) ?? {};
+
+    const extractionResult = await measureAsync(profiler, "prepare", async () => {
+      return await prepareVideoFrameExtractions({
+        job,
+        components: enabledComponents,
+        assets,
+        prepared,
+        signal: renderSignal,
+        logger
+      });
+    });
+    videoFrameExtractions = extractionResult.entries;
+
     const scenePayload = createLiveDomScenePayload({
       job,
       components: enabledComponents,
@@ -140,7 +165,8 @@ export async function renderLyricVideo({
           scenePayload,
           signal: renderSignal,
           logger,
-          profiler
+          profiler,
+          videoFrameExtractions
         })
       });
     }
@@ -210,7 +236,8 @@ export async function renderLyricVideo({
               scenePayload,
               signal: renderSignal,
               logger,
-              profiler
+              profiler,
+              videoFrameExtractions
             }),
           signal: renderSignal,
           logger,
@@ -295,6 +322,7 @@ export async function renderLyricVideo({
     }
 
     await Promise.allSettled(workerHandles.map((workerHandle) => workerHandle.current.dispose()));
+    await cleanupVideoFrameExtractions(videoFrameExtractions);
     signal?.removeEventListener("abort", forwardAbort);
 
     logRenderProfile(profiler, job, logger);

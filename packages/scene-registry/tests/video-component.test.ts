@@ -13,7 +13,11 @@ import {
   type VideoComponentOptions
 } from "../src/components/video";
 import { buildVideoInitialState } from "../src/components/video/runtime";
-import { computeVideoPlaybackState } from "../src/components/video/playback";
+import {
+  computeVideoPlaybackState,
+  formatVideoFrameName,
+  mapVideoPlaybackTimeToFrameNumber
+} from "../src/components/video/playback";
 import { prepareVideoComponent } from "../src/components/video/prepare";
 
 const video: VideoSettings = {
@@ -299,6 +303,57 @@ describe("Video frame-sync state (T-057)", () => {
     });
     expect((state as { opacity: number }).opacity).toBe(0);
     expect((state as { __videoSync?: unknown }).__videoSync).toBeUndefined();
+  });
+
+  it("uses image frame sync when extraction metadata exists", () => {
+    if (!videoComponent.browserRuntime?.getFrameState) throw new Error();
+    const state = videoComponent.browserRuntime.getFrameState({
+      instance: { id: "v1", componentId: "video", componentName: "Video", enabled: true, options: {} },
+      options: opts({ startTime: 0, opacity: 100, videoStartOffsetMs: 500 }),
+      frame: 0,
+      timeMs: 1000,
+      video,
+      lyrics: { current: null, next: null, all: [] },
+      assets: { getUrl: () => "/asset/clip.mp4" },
+      prepared: {
+        durationMs: 5000,
+        width: 640,
+        height: 360,
+        frameRate: 30,
+        __videoFrameExtraction: {
+          mode: "image-sequence",
+          extractionId: "extract-a",
+          urlPrefix: "http://lyric-video.local/video-frames/extract-a/",
+          outputFps: 30,
+          frameCount: 30,
+          tempDir: "/tmp/extract-a"
+        }
+      }
+    });
+    expect((state as { __videoSync?: unknown }).__videoSync).toBeUndefined();
+    expect((state as { __imageFrameSync?: { src: string } }).__imageFrameSync?.src).toBe(
+      "http://lyric-video.local/video-frames/extract-a/frame-00000030.jpg"
+    );
+  });
+
+  it("initial extraction markup uses img with video-frame marker", () => {
+    const state = buildVideoInitialState(opts({ fitMode: "cover" }), video, "/asset/clip.mp4", {
+      mode: "image-sequence",
+      urlPrefix: "http://lyric-video.local/video-frames/extract-a/",
+      outputFps: 30,
+      frameCount: 30
+    });
+    expect(state.html).toContain("<img");
+    expect(state.html).toContain("data-video-frame");
+    expect(state.html).toContain("object-fit:cover");
+    expect(state.html).not.toContain("<video");
+  });
+
+  it("maps extracted frame numbers with clamp", () => {
+    expect(mapVideoPlaybackTimeToFrameNumber({ targetTimeSeconds: 0, fps: 30, frameCount: 90 })).toBe(1);
+    expect(mapVideoPlaybackTimeToFrameNumber({ targetTimeSeconds: 1.2, fps: 30, frameCount: 90 })).toBe(37);
+    expect(mapVideoPlaybackTimeToFrameNumber({ targetTimeSeconds: 99, fps: 30, frameCount: 90 })).toBe(90);
+    expect(formatVideoFrameName(37)).toBe("frame-00000037.jpg");
   });
 });
 

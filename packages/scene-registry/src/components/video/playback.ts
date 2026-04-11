@@ -81,6 +81,23 @@ export function computeVideoPlaybackState(inputs: VideoPlaybackInputs): VideoPla
   }
 }
 
+export function mapVideoPlaybackTimeToFrameNumber({
+  targetTimeSeconds,
+  fps,
+  frameCount
+}: {
+  targetTimeSeconds: number;
+  fps: number;
+  frameCount: number;
+}) {
+  const rawFrame = Math.floor(Math.max(0, targetTimeSeconds) * fps) + 1;
+  return Math.max(1, Math.min(frameCount, rawFrame));
+}
+
+export function formatVideoFrameName(frameNumber: number) {
+  return `frame-${String(frameNumber).padStart(8, "0")}.jpg`;
+}
+
 function clamp(value: number, lo: number, hi: number): number {
   if (value <= lo) return lo;
   if (value >= hi) return hi;

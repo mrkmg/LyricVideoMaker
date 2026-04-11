@@ -15,6 +15,14 @@ export interface VideoPrepared extends Record<string, unknown> {
   width: number;
   height: number;
   frameRate: number;
+  __videoFrameExtraction?: {
+    mode: "image-sequence";
+    extractionId: string;
+    urlPrefix: string;
+    outputFps: number;
+    frameCount: number;
+    tempDir: string;
+  };
 }
 
 export async function prepareVideoComponent(

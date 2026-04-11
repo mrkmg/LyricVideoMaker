@@ -32,6 +32,7 @@ import type {
   RenderLogger,
   RenderProfiler
 } from "../types";
+import type { VideoFrameExtractionEntry } from "../video-frame-extraction";
 import { captureFrameBuffer } from "./capture";
 import { loadChromium } from "./chromium-loader";
 import { wirePageDiagnostics } from "./diagnostics";
@@ -51,7 +52,8 @@ export async function createLiveDomRenderSession({
   signal,
   logger,
   profiler,
-  previewProfiler
+  previewProfiler,
+  videoFrameExtractions = []
 }: {
   sessionLabel: string;
   job: RenderJob;
@@ -65,6 +67,7 @@ export async function createLiveDomRenderSession({
   logger: RenderLogger;
   profiler?: RenderProfiler;
   previewProfiler?: PreviewProfiler;
+  videoFrameExtractions?: VideoFrameExtractionEntry[];
 }): Promise<FramePreviewSession> {
   let browser: Browser | null = null;
   let browserContext: BrowserContext | null = null;
@@ -89,7 +92,7 @@ export async function createLiveDomRenderSession({
     page = renderPage.page;
 
     wirePageDiagnostics(page, logger);
-    await registerAssetRoutes(page, preloadedAssets, logger);
+    await registerAssetRoutes(page, preloadedAssets, logger, videoFrameExtractions);
     await page.setContent(renderPageShell(), { waitUntil: "domcontentloaded" });
 
     cdpSession = await page.context().newCDPSession(page);

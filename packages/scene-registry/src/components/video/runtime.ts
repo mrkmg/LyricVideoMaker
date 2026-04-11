@@ -11,6 +11,13 @@ export interface VideoInitialState {
   sourceUrl: string | null;
 }
 
+export interface VideoFrameExtractionMetadata {
+  mode: "image-sequence";
+  urlPrefix: string;
+  outputFps: number;
+  frameCount: number;
+}
+
 /**
  * Build the Video component browser-side initial state. Mounts an inner
  * <video> element preloaded for programmatic playback (muted, preload
@@ -24,7 +31,8 @@ export interface VideoInitialState {
 export function buildVideoInitialState(
   options: VideoComponentOptions,
   video: VideoSettings,
-  resolvedUrl: string | null
+  resolvedUrl: string | null,
+  frameExtraction?: VideoFrameExtractionMetadata | null
 ): VideoInitialState {
   const transformStyle = computeTransformStyle(options, {
     width: video.width,
@@ -47,14 +55,18 @@ export function buildVideoInitialState(
     containerStyle.filter = shadowFilter;
   }
 
-  const html = resolvedUrl ? buildInnerMarkup(options, resolvedUrl) : "";
+  const html = frameExtraction
+    ? buildImageSequenceMarkup(options)
+    : resolvedUrl
+      ? buildInnerMarkup(options, resolvedUrl)
+      : "";
   const initialOpacity = (options.opacity / 100) * computeTimingOpacity(0, options);
 
   return {
     html,
     containerStyle,
     initialOpacity,
-    sourceUrl: resolvedUrl
+    sourceUrl: frameExtraction ? frameExtraction.urlPrefix : resolvedUrl
   };
 }
 
@@ -67,6 +79,16 @@ function buildInnerMarkup(options: VideoComponentOptions, url: string): string {
     ? `<div style="position:absolute;inset:0;background:${withAlpha(options.tintColor, options.tintStrength / 100)};mix-blend-mode:multiply;"></div>`
     : "";
   return `${video}${tint}`;
+}
+
+function buildImageSequenceMarkup(options: VideoComponentOptions): string {
+  const fitMode = options.fitMode;
+  const filter = buildVideoFilter(options);
+  const image = `<img data-video-frame="" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:${fitMode};${filter ? `filter:${filter};` : ""}" />`;
+  const tint = options.tintEnabled
+    ? `<div style="position:absolute;inset:0;background:${withAlpha(options.tintColor, options.tintStrength / 100)};mix-blend-mode:multiply;"></div>`
+    : "";
+  return `${image}${tint}`;
 }
 
 function buildVideoFilter(options: VideoComponentOptions): string {

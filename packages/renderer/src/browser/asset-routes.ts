@@ -1,6 +1,9 @@
+import { stat } from "node:fs/promises";
+import { join } from "node:path";
 import type { Page, Route } from "playwright";
-import { ASSET_URL_PREFIX } from "../constants";
+import { ASSET_URL_PREFIX, VIDEO_FRAME_URL_PREFIX } from "../constants";
 import type { PreloadedAsset, RenderLogger } from "../types";
+import type { VideoFrameExtractionEntry } from "../video-frame-extraction";
 
 /**
  * Asset route handler (cavekit-video-field-type R6 / T-012).
@@ -23,10 +26,14 @@ import type { PreloadedAsset, RenderLogger } from "../types";
 export async function registerAssetRoutes(
   page: Page,
   assets: Map<string, PreloadedAsset>,
-  logger: RenderLogger
+  logger: RenderLogger,
+  videoFrameExtractions: VideoFrameExtractionEntry[] = []
 ) {
   await page.route(`${ASSET_URL_PREFIX}**`, async (route) => {
     await fulfillAssetRoute(route, assets, logger);
+  });
+  await page.route(`${VIDEO_FRAME_URL_PREFIX}**`, async (route) => {
+    await fulfillVideoFrameRoute(route, videoFrameExtractions, logger);
   });
 }
 
@@ -92,6 +99,111 @@ export async function fulfillAssetRoute(
       "Cache-Control": "public, max-age=31536000, immutable"
     }
   });
+}
+
+export async function fulfillVideoFrameRoute(
+  route: Route,
+  entries: VideoFrameExtractionEntry[],
+  logger: RenderLogger
+) {
+  const url = route.request().url();
+  const resolved = resolveVideoFrameRequest(url, entries);
+  const canServe = resolved ? await canServeVideoFrameRequest(url, entries) : false;
+  if (!resolved || !canServe) {
+    logger.warn(`Video frame request had no registered file: ${url}`);
+    await route.fulfill({
+      status: 404,
+      body: "Not found",
+      headers: {
+        "Content-Type": "text/plain"
+      }
+    });
+    return;
+  }
+
+  await route.fulfill({
+    status: 200,
+    path: resolved.path,
+    headers: {
+      "Content-Type": "image/jpeg",
+      "Cache-Control": "public, max-age=31536000, immutable"
+    }
+  });
+}
+
+export async function canServeVideoFrameRequest(
+  url: string,
+  entries: VideoFrameExtractionEntry[]
+) {
+  const resolved = resolveVideoFrameRequest(url, entries);
+  if (!resolved) {
+    return false;
+  }
+
+  try {
+    const result = await stat(resolved.path);
+    return result.isFile();
+  } catch {
+    return false;
+  }
+}
+
+function resolveVideoFrameRequest(
+  url: string,
+  entries: VideoFrameExtractionEntry[]
+): { path: string } | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+
+  const prefix = new URL(VIDEO_FRAME_URL_PREFIX);
+  if (parsed.origin !== prefix.origin || !parsed.pathname.startsWith(prefix.pathname)) {
+    return null;
+  }
+
+  const tail = parsed.pathname.slice(prefix.pathname.length);
+  const parts = tail.split("/");
+  if (parts.length !== 2) {
+    return null;
+  }
+
+  const [encodedExtractionId, encodedFrameName] = parts;
+  const extractionId = decodeUrlPathPart(encodedExtractionId);
+  const frameName = decodeUrlPathPart(encodedFrameName);
+  if (
+    !extractionId ||
+    !frameName ||
+    !/^[a-zA-Z0-9_-]+$/.test(extractionId) ||
+    !/^frame-\d{8}\.jpg$/.test(frameName)
+  ) {
+    return null;
+  }
+
+  const entry = entries.find((candidate) => candidate.extractionId === extractionId);
+  if (!entry) {
+    return null;
+  }
+
+  const match = /^frame-(\d{8})\.jpg$/.exec(frameName);
+  const frameNumber = match ? Number(match[1]) : 0;
+  if (!Number.isInteger(frameNumber) || frameNumber < 1 || frameNumber > entry.frameCount) {
+    return null;
+  }
+
+  return {
+    path: join(entry.tempDir, frameName)
+  };
+}
+
+function decodeUrlPathPart(value: string) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return null;
+  }
 }
 
 function parseByteRange(

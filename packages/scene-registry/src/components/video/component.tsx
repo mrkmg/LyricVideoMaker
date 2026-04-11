@@ -7,8 +7,14 @@ import {
   type VideoComponentOptions
 } from "./options";
 import { buildVideoInitialState } from "./runtime";
-import { computeVideoPlaybackState } from "./playback";
+import {
+  computeVideoPlaybackState,
+  formatVideoFrameName,
+  mapVideoPlaybackTimeToFrameNumber
+} from "./playback";
 import { prepareVideoComponent, type VideoPrepared } from "./prepare";
+
+const VIDEO_FRAME_EXTRACTION_PREPARED_KEY = "__videoFrameExtraction";
 
 /**
  * Video component (cavekit-video-component).
@@ -44,11 +50,16 @@ export const videoComponent: SceneComponentDefinition<VideoComponentOptions> = {
   prepare: async (ctx) => prepareVideoComponent(ctx),
   browserRuntime: {
     runtimeId: "static-fx-layer",
-    getInitialState({ instance, options, video, assets }) {
+    getInitialState({ instance, options, video, assets, prepared }) {
       const url = assets.getUrl(instance.id, "source");
-      return buildVideoInitialState(options, video, url) as unknown as Record<string, unknown>;
+      return buildVideoInitialState(
+        options,
+        video,
+        url,
+        getVideoFrameExtraction(prepared)
+      ) as unknown as Record<string, unknown>;
     },
-    getFrameState({ options, timeMs, prepared }) {
+    getFrameState({ options, timeMs, video, prepared }) {
       const opacity = (options.opacity / 100) * computeTimingOpacity(timeMs, options);
       const probed = prepared as VideoPrepared | undefined;
       if (!probed || !probed.durationMs) {
@@ -68,6 +79,21 @@ export const videoComponent: SceneComponentDefinition<VideoComponentOptions> = {
       });
       if (playback.hidden) {
         return { opacity: 0 };
+      }
+      const frameExtraction = getVideoFrameExtraction(prepared);
+      if (frameExtraction) {
+        const frameNumber = mapVideoPlaybackTimeToFrameNumber({
+          targetTimeSeconds: playback.targetTimeSeconds,
+          fps: video.fps,
+          frameCount: frameExtraction.frameCount
+        });
+        return {
+          opacity,
+          __imageFrameSync: {
+            src: `${frameExtraction.urlPrefix}${formatVideoFrameName(frameNumber)}`,
+            label: "video-component"
+          }
+        };
       }
       return {
         opacity,
@@ -93,3 +119,33 @@ export const videoComponent: SceneComponentDefinition<VideoComponentOptions> = {
     );
   }
 };
+
+function getVideoFrameExtraction(prepared: Record<string, unknown>) {
+  const metadata = prepared[VIDEO_FRAME_EXTRACTION_PREPARED_KEY];
+  if (!metadata || typeof metadata !== "object") {
+    return null;
+  }
+
+  const value = metadata as {
+    mode?: unknown;
+    urlPrefix?: unknown;
+    outputFps?: unknown;
+    frameCount?: unknown;
+  };
+  if (
+    value.mode !== "image-sequence" ||
+    typeof value.urlPrefix !== "string" ||
+    typeof value.outputFps !== "number" ||
+    typeof value.frameCount !== "number" ||
+    value.frameCount <= 0
+  ) {
+    return null;
+  }
+
+  return {
+    mode: "image-sequence" as const,
+    urlPrefix: value.urlPrefix,
+    outputFps: value.outputFps,
+    frameCount: value.frameCount
+  };
+}
