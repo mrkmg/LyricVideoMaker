@@ -172,7 +172,7 @@ export async function updateLiveDomScene(page: Page, payload: LiveDomFramePayloa
 }
 
 /**
- * Per-frame readiness gate (video-frame-sync R1/R2).
+ * Per-frame readiness gate.
  *
  * Awaits any asynchronous readiness tasks that components registered with
  * `window.__frameReadiness` during the current frame — typically video
@@ -228,8 +228,6 @@ export interface ReadinessTimeoutEvent {
  *
  * The script installs:
  *   - window.__frameReadiness  — the per-frame readiness gate (T-042, R1)
- *   - window.__syncVideoElement — helper to seek a <video> to a target
- *                                 time and return a readiness promise (T-044)
  *   - window.__syncImageFrameElement — helper to swap an <img> source and
  *                                      return a readiness promise
  *   - window.__frameReadinessSetCurrentFrame — internal hook so the frame
@@ -271,123 +269,23 @@ export const FRAME_READINESS_SCRIPT_SOURCE = `
     return readinessTimeoutEvents.splice(0, readinessTimeoutEvents.length);
   };
 
-  var VIDEO_SEEK_EPSILON_SECONDS = 1 / 240; // ~4ms — sub-frame precision
-  var VIDEO_SEEK_TIMEOUT_MS = 1000;
+  var IMAGE_FRAME_TIMEOUT_MS = 1000;
 
   function recordReadinessTimeout(label) {
     readinessTimeoutEvents.push({
       frame: currentFrameNumber,
       label: label || null,
-      timeoutMs: VIDEO_SEEK_TIMEOUT_MS,
+      timeoutMs: IMAGE_FRAME_TIMEOUT_MS,
       timestamp: Date.now()
     });
     if (typeof console !== "undefined" && console.warn) {
       console.warn(
         "[frame-readiness] timeout at frame " + currentFrameNumber +
         " label=" + (label || "(none)") +
-        " timeoutMs=" + VIDEO_SEEK_TIMEOUT_MS
+        " timeoutMs=" + IMAGE_FRAME_TIMEOUT_MS
       );
     }
   }
-
-  window.__syncVideoElement = function syncVideoElement(video, targetTimeSeconds, label) {
-    if (!video || typeof targetTimeSeconds !== "number") {
-      return null;
-    }
-    var currentTime = typeof video.currentTime === "number" ? video.currentTime : 0;
-    function hasMetadata() {
-      return typeof video.readyState !== "number" || video.readyState >= 1;
-    }
-    function hasDecodedFrame() {
-      return typeof video.readyState !== "number" || video.readyState >= 2;
-    }
-    if (
-      Math.abs(currentTime - targetTimeSeconds) < VIDEO_SEEK_EPSILON_SECONDS &&
-      hasDecodedFrame()
-    ) {
-      return null;
-    }
-    return new Promise(function(resolve) {
-      var settled = false;
-      var timer = null;
-      var seekIssued = false;
-      function finish() {
-        if (settled) return;
-        settled = true;
-        if (timer !== null) { clearTimeout(timer); }
-        video.removeEventListener("loadedmetadata", onReady);
-        video.removeEventListener("loadeddata", onReady);
-        video.removeEventListener("canplay", onReady);
-        video.removeEventListener("loadeddata", onDecodedAfterSeek);
-        video.removeEventListener("canplay", onDecodedAfterSeek);
-        video.removeEventListener("seeked", onSeeked);
-        video.removeEventListener("error", onError);
-        resolve();
-      }
-      function safeTargetTime() {
-        if (typeof video.duration === "number" && isFinite(video.duration) && video.duration > 0) {
-          return Math.max(0, Math.min(targetTimeSeconds, Math.max(0, video.duration - 1 / 240)));
-        }
-        return Math.max(0, targetTimeSeconds);
-      }
-      function maybeFinishWithoutSeek() {
-        currentTime = typeof video.currentTime === "number" ? video.currentTime : 0;
-        if (
-          Math.abs(currentTime - safeTargetTime()) < VIDEO_SEEK_EPSILON_SECONDS &&
-          hasDecodedFrame()
-        ) {
-          finish();
-          return true;
-        }
-        return false;
-      }
-      function issueSeekWhenReady() {
-        if (settled || seekIssued || !hasMetadata()) {
-          return;
-        }
-        if (maybeFinishWithoutSeek()) {
-          return;
-        }
-        seekIssued = true;
-        try {
-          video.currentTime = safeTargetTime();
-        } catch (error) {
-          finish();
-        }
-      }
-      function onReady() { issueSeekWhenReady(); }
-      function onSeeked() {
-        if (hasDecodedFrame()) {
-          finish();
-          return;
-        }
-        video.addEventListener("loadeddata", onDecodedAfterSeek, { once: true });
-        video.addEventListener("canplay", onDecodedAfterSeek, { once: true });
-      }
-      function onDecodedAfterSeek() { finish(); }
-      function onError() { finish(); }
-      video.addEventListener("loadedmetadata", onReady, { once: true });
-      video.addEventListener("loadeddata", onReady, { once: true });
-      video.addEventListener("canplay", onReady, { once: true });
-      video.addEventListener("seeked", onSeeked, { once: true });
-      video.addEventListener("error", onError, { once: true });
-      try {
-        if (!hasMetadata()) {
-          video.load();
-        }
-        issueSeekWhenReady();
-      } catch (error) {
-        finish();
-        return;
-      }
-      timer = setTimeout(function() {
-        if (!settled) {
-          recordReadinessTimeout(label);
-        }
-        finish();
-      }, VIDEO_SEEK_TIMEOUT_MS);
-    });
-  };
 
   window.__syncImageFrameElement = function syncImageFrameElement(image, src, label) {
     if (!image || typeof src !== "string" || !src) {
@@ -398,9 +296,11 @@ export const FRAME_READINESS_SCRIPT_SOURCE = `
     }
     return new Promise(function(resolve) {
       var settled = false;
+      var timer = null;
       function finish() {
         if (settled) return;
         settled = true;
+        if (timer !== null) { clearTimeout(timer); }
         image.removeEventListener("load", onLoad);
         image.removeEventListener("error", onError);
         resolve();
@@ -423,6 +323,12 @@ export const FRAME_READINESS_SCRIPT_SOURCE = `
       } catch (error) {
         finish();
       }
+      timer = setTimeout(function() {
+        if (!settled) {
+          recordReadinessTimeout(label);
+        }
+        finish();
+      }, IMAGE_FRAME_TIMEOUT_MS);
     });
   };
 `;
@@ -456,8 +362,8 @@ export function renderPageShell(): string {
         const mountedComponents = new Map();
 
         // ────────────────────────────────────────────────────────────────
-        // Per-frame readiness gate (video-frame-sync R1–R4). Installs
-        // window.__frameReadiness, window.__syncVideoElement, and related
+        // Per-frame readiness gate. Installs
+        // window.__frameReadiness, window.__syncImageFrameElement, and related
         // helpers. The contract is component-agnostic so any async task can
         // be registered. See FRAME_READINESS_SCRIPT_SOURCE in live-dom.ts.
         // ────────────────────────────────────────────────────────────────
@@ -819,25 +725,15 @@ export function renderPageShell(): string {
         // per-frame state to the mounted DOM. Runtimes are keyed by
         // runtimeId and looked up in the registry below.
         //
-        // Per-frame readiness contract (video-frame-sync R6, T-047):
+        // Per-frame readiness contract:
         //   Components that need asynchronous DOM work to settle before
-        //   capture (notably the Video component, which must seek a
-        //   <video> element to a target time before screenshotting)
-        //   participate implicitly via their per-frame state shape:
+        //   capture participate implicitly via internal frame state.
+        //   Video frame sequences return:
         //
-        //     state.__videoSync = { targetTimeSeconds: number, label?: string }
+        //     state.__imageFrameSync = { src: string, label?: string }
         //
-        //   The __renderLiveDomFrame wrapper (below) looks for this shape
-        //   on every component's state, finds <video> elements inside
-        //   that component's layer, and — via window.__syncVideoElement —
-        //   seeks any whose currentTime differs from the target by more
-        //   than VIDEO_SEEK_EPSILON_SECONDS. Each outstanding seek
-        //   registers a readiness task on window.__frameReadiness, and
-        //   the Node-side capture loop awaits __frameReadiness.awaitAll()
-        //   before screenshotting the current frame. A bounded timeout
-        //   (VIDEO_SEEK_TIMEOUT_MS) resolves stuck seeks without
-        //   aborting the render; timeout events are drained back to Node
-        //   for logging.
+        //   The wrapper updates owned <img data-video-frame> elements and
+        //   registers a readiness task until load/decode settles.
         //
         //   The contract is deliberately component-agnostic: any async
         //   task can register itself on __frameReadiness, and future
@@ -1087,28 +983,6 @@ export function renderPageShell(): string {
 
             const state = component.state || {};
             mounted.runtime.update(mounted.handle, state);
-
-            // Video-frame-sync detection (T-044). State shape:
-            //   state.__videoSync = { targetTimeSeconds: number, label?: string }
-            // The runtime finds <video> elements owned by this component's
-            // layer, seeks any whose currentTime differs from the desired
-            // position by more than an epsilon, and registers a readiness
-            // task per seek so capture blocks until the seek settles.
-            const videoSync = state.__videoSync;
-            if (videoSync && typeof videoSync === "object") {
-              const videos = mounted.layer.querySelectorAll("video");
-              for (let i = 0; i < videos.length; i += 1) {
-                const label = videoSync.label || (component.instanceId + ":video");
-                const readiness = window.__syncVideoElement(
-                  videos[i],
-                  videoSync.targetTimeSeconds,
-                  label
-                );
-                if (readiness) {
-                  window.__frameReadiness.register(readiness, label);
-                }
-              }
-            }
 
             const imageFrameSync = state.__imageFrameSync;
             if (imageFrameSync && typeof imageFrameSync === "object" && typeof imageFrameSync.src === "string") {

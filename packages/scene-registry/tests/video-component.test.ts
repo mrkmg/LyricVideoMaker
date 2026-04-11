@@ -140,16 +140,22 @@ describe("Video prepare phase (T-053)", () => {
 });
 
 describe("Video rendering — inner element + effects (T-054)", () => {
-  it("inner video element is muted and preloaded", () => {
-    const state = buildVideoInitialState(opts({ muted: true }), video, "/asset/clip.mp4");
-    expect(state.html).toContain("<video");
-    expect(state.html).toContain("muted");
-    expect(state.html).toContain('preload="auto"');
-    expect(state.html).toContain('playsinline');
+  const extraction = {
+    mode: "image-sequence" as const,
+    urlPrefix: "http://lyric-video.local/video-frames/extract-a/",
+    outputFps: 30,
+    frameCount: 30
+  };
+
+  it("inner element is an extracted frame image", () => {
+    const state = buildVideoInitialState(opts({ muted: true }), video, "/asset/clip.mp4", extraction);
+    expect(state.html).toContain("<img");
+    expect(state.html).toContain("data-video-frame");
+    expect(state.html).not.toContain("<video");
   });
 
   it.each(["contain", "cover", "fill"] as const)("%s fit mode applies object-fit", (mode) => {
-    const state = buildVideoInitialState(opts({ fitMode: mode }), video, "/asset/clip.mp4");
+    const state = buildVideoInitialState(opts({ fitMode: mode }), video, "/asset/clip.mp4", extraction);
     expect(state.html).toContain(`object-fit:${mode}`);
   });
 
@@ -163,7 +169,8 @@ describe("Video rendering — inner element + effects (T-054)", () => {
         glowEnabled: true
       }),
       video,
-      "/asset/clip.mp4"
+      "/asset/clip.mp4",
+      extraction
     );
     expect(state.containerStyle.borderRadius).toBe("16px");
     expect(state.containerStyle.border).toBe("4px solid #ffffff");
@@ -176,7 +183,8 @@ describe("Video rendering — inner element + effects (T-054)", () => {
     const state = buildVideoInitialState(
       opts({ grayscale: 50, brightness: 80 }),
       video,
-      "/asset/clip.mp4"
+      "/asset/clip.mp4",
+      extraction
     );
     expect(state.html).toContain("grayscale(0.5)");
     expect(state.html).toContain("brightness(0.8)");
@@ -186,11 +194,12 @@ describe("Video rendering — inner element + effects (T-054)", () => {
     const withTint = buildVideoInitialState(
       opts({ tintEnabled: true, tintColor: "#00ff00", tintStrength: 50 }),
       video,
-      "/asset/clip.mp4"
+      "/asset/clip.mp4",
+      extraction
     );
     expect(withTint.html).toContain("mix-blend-mode:multiply");
 
-    const noTint = buildVideoInitialState(opts({ tintEnabled: false }), video, "/asset/clip.mp4");
+    const noTint = buildVideoInitialState(opts({ tintEnabled: false }), video, "/asset/clip.mp4", extraction);
     expect(noTint.html).not.toContain("mix-blend-mode");
   });
 });
@@ -255,7 +264,7 @@ describe("Video playback math (T-055, T-056)", () => {
 });
 
 describe("Video frame-sync state (T-057)", () => {
-  it("getFrameState returns __videoSync payload consumable by the live-DOM handler", () => {
+  it("getFrameState returns opacity only when extraction metadata is missing", () => {
     if (!videoComponent.browserRuntime?.getFrameState) {
       throw new Error("video browserRuntime.getFrameState missing");
     }
@@ -270,7 +279,7 @@ describe("Video frame-sync state (T-057)", () => {
       prepared: { durationMs: 10_000, width: 640, height: 360, frameRate: 30 }
     });
     expect(state).toBeDefined();
-    expect((state as { __videoSync?: { targetTimeSeconds: number } }).__videoSync).toBeDefined();
+    expect((state as { __imageFrameSync?: unknown }).__imageFrameSync).toBeUndefined();
     expect((state as { opacity: number }).opacity).toBeCloseTo(1);
   });
 
@@ -302,7 +311,7 @@ describe("Video frame-sync state (T-057)", () => {
       prepared: { durationMs: 5000, width: 640, height: 360, frameRate: 30 }
     });
     expect((state as { opacity: number }).opacity).toBe(0);
-    expect((state as { __videoSync?: unknown }).__videoSync).toBeUndefined();
+    expect((state as { __imageFrameSync?: unknown }).__imageFrameSync).toBeUndefined();
   });
 
   it("uses image frame sync when extraction metadata exists", () => {
@@ -330,7 +339,7 @@ describe("Video frame-sync state (T-057)", () => {
         }
       }
     });
-    expect((state as { __videoSync?: unknown }).__videoSync).toBeUndefined();
+    expect((state as { __imageFrameSync?: unknown }).__imageFrameSync).toBeDefined();
     expect((state as { __imageFrameSync?: { src: string } }).__imageFrameSync?.src).toBe(
       "http://lyric-video.local/video-frames/extract-a/frame-00000030.jpg"
     );
@@ -358,11 +367,6 @@ describe("Video frame-sync state (T-057)", () => {
 });
 
 describe("Audio handling (T-058)", () => {
-  it("muted attribute is present on the rendered video element when muted=true", () => {
-    const state = buildVideoInitialState(opts({ muted: true }), video, "/asset/clip.mp4");
-    expect(state.html).toContain(" muted");
-  });
-
   it("default options enforce muted (even if user re-checks the box later)", () => {
     expect(DEFAULT_VIDEO_OPTIONS.muted).toBe(true);
   });

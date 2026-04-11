@@ -17,6 +17,11 @@ import {
   type PreviewAssetCache,
   type PreviewComputationCache
 } from "../types";
+import {
+  cleanupVideoFrameExtractions,
+  prepareVideoFrameExtractions,
+  type VideoFrameExtractionEntry
+} from "../video-frame-extraction";
 
 export interface CreateFramePreviewSessionInput {
   job: RenderJob;
@@ -75,23 +80,50 @@ export async function createFramePreviewSession({
       prepareCache: previewCache?.prepareResults
     })
   );
-  return await createLiveDomRenderSession({
-    sessionLabel: "preview",
-    job,
-    componentLookup,
-    components: enabledComponents,
-    assets,
-    preloadedAssets,
-    prepared,
-    scenePayload: createLiveDomScenePayload({
+  let videoFrameExtractions: VideoFrameExtractionEntry[] = [];
+  try {
+    const extractionResult = await measurePreviewStage(previewProfiler, "prepareSceneComponents", async () =>
+      await prepareVideoFrameExtractions({
+        job,
+        components: enabledComponents,
+        assets,
+        prepared,
+        signal,
+        logger
+      })
+    );
+    videoFrameExtractions = extractionResult.entries;
+
+    const session = await createLiveDomRenderSession({
+      sessionLabel: "preview",
       job,
-      components: enabledComponents,
       componentLookup,
+      components: enabledComponents,
       assets,
-      prepared
-    }),
-    signal,
-    logger,
-    previewProfiler
-  });
+      preloadedAssets,
+      prepared,
+      scenePayload: createLiveDomScenePayload({
+        job,
+        components: enabledComponents,
+        componentLookup,
+        assets,
+        prepared
+      }),
+      signal,
+      logger,
+      previewProfiler,
+      videoFrameExtractions
+    });
+
+    return {
+      renderFrame: session.renderFrame,
+      async dispose() {
+        await session.dispose();
+        await cleanupVideoFrameExtractions(videoFrameExtractions);
+      }
+    };
+  } catch (error) {
+    await cleanupVideoFrameExtractions(videoFrameExtractions);
+    throw error;
+  }
 }

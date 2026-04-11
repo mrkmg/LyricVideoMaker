@@ -4,7 +4,6 @@ import { dirname } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RenderJob, ValidatedSceneComponentInstance } from "@lyric-video-maker/core";
 import { createAbortError } from "../src/abort";
-import { isVideoFrameExtractionEnabled } from "../src/constants";
 import {
   cleanupVideoFrameExtractions,
   formatExtractedFrameName,
@@ -37,39 +36,11 @@ const job: RenderJob = {
 };
 
 afterEach(() => {
-  vi.unstubAllEnvs();
   vi.clearAllMocks();
 });
 
-describe("video frame extraction flag", () => {
-  it("defaults off and enables only with value 1", () => {
-    expect(isVideoFrameExtractionEnabled(undefined)).toBe(false);
-    expect(isVideoFrameExtractionEnabled("0")).toBe(false);
-    expect(isVideoFrameExtractionEnabled("true")).toBe(false);
-    expect(isVideoFrameExtractionEnabled("1")).toBe(true);
-  });
-});
-
 describe("prepareVideoFrameExtractions", () => {
-  it("does not augment prepared data when flag is off", async () => {
-    vi.stubEnv("LYRIC_VIDEO_VIDEO_FRAME_EXTRACTION", "0");
-    const prepared = { "video-1": { durationMs: 1000 } };
-
-    const result = await prepareVideoFrameExtractions({
-      job,
-      components: [videoComponent],
-      assets: { getPath: () => "C:/tmp/clip.mp4" },
-      prepared,
-      logger
-    });
-
-    expect(result.enabled).toBe(false);
-    expect(result.entries).toHaveLength(0);
-    expect(prepared["video-1"][VIDEO_FRAME_EXTRACTION_PREPARED_KEY]).toBeUndefined();
-  });
-
   it("creates extraction metadata and removes temp dirs", async () => {
-    vi.stubEnv("LYRIC_VIDEO_VIDEO_FRAME_EXTRACTION", "1");
     const prepared = { "video-1": { durationMs: 1000 } };
     const runFfmpeg = vi.fn(async (_command: string, args: string[]) => {
       const pattern = args[args.length - 1];
@@ -103,7 +74,6 @@ describe("prepareVideoFrameExtractions", () => {
   });
 
   it("cleans temp dir when ffmpeg extraction fails", async () => {
-    vi.stubEnv("LYRIC_VIDEO_VIDEO_FRAME_EXTRACTION", "1");
     let createdDir = "";
     const runFfmpeg = vi.fn(async (_command: string, args: string[]) => {
       createdDir = dirname(args[args.length - 1]);
@@ -127,7 +97,6 @@ describe("prepareVideoFrameExtractions", () => {
   });
 
   it("preserves abort errors after cleaning temp dir", async () => {
-    vi.stubEnv("LYRIC_VIDEO_VIDEO_FRAME_EXTRACTION", "1");
     let createdDir = "";
     const runFfmpeg = vi.fn(async (_command: string, args: string[]) => {
       createdDir = dirname(args[args.length - 1]);

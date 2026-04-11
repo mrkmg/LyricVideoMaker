@@ -15,7 +15,8 @@ export async function preloadSceneAssets(
   video: RenderJob["video"],
   logger: RenderLogger,
   signal?: AbortSignal,
-  assetCache?: PreviewAssetCache
+  assetCache?: PreviewAssetCache,
+  options: { includeVideoAssets?: boolean } = {}
 ): Promise<Map<string, PreloadedAsset>> {
   const assets = new Map<string, PreloadedAsset>();
 
@@ -26,14 +27,14 @@ export async function preloadSceneAssets(
     }
 
     // Iterate every option entry — including fields nested inside category
-    // entries — and preload both image and video asset kinds. Non-asset
-    // field types are skipped. (T-011)
+    // entries — and preload image assets. Video fields are skipped by default
+    // because built-in video rendering reads source paths for frame extraction.
     const flatFields = definition.options.flatMap((entry) =>
       entry.type === "category" ? entry.options : [entry]
     );
 
     for (const field of flatFields) {
-      if (field.type !== "image" && field.type !== "video") {
+      if (field.type !== "image" && (field.type !== "video" || !options.includeVideoAssets)) {
         continue;
       }
 

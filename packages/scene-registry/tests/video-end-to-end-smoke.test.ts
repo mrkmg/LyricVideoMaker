@@ -32,13 +32,8 @@ function opts(overrides: Partial<VideoComponentOptions>): VideoComponentOptions 
  * Smoke-tests the four playback modes through a simulated 30-second
  * render against a synthetic 5-second clip. Boundary timestamps (start,
  * middle, end + 1 frame) are checked per mode without requiring an
- * actual playwright preview. The Phase-A path is verifiable in
- * isolation; the full visual rendering smoke remains a manual sanity
- * check, captured here as the comprehensive automated alternative.
- *
- * Phase-B fallback (per-frame ffmpeg pre-extraction) is described in
- * source-level doc comments on videoComponent and explicitly is NOT
- * implemented (R10 AC4).
+ * actual playwright preview. Renderer-owned frame extraction and route
+ * handling are covered in renderer package tests.
  */
 describe("T-059 — Video component end-to-end smoke", () => {
   describe("preview plays a short clip across all four playback modes", () => {
@@ -180,13 +175,10 @@ describe("T-059 — Video component end-to-end smoke", () => {
     }
   });
 
-  it("Phase-B fallback is documented in source comments and not implemented (R10 AC4)", () => {
-    // The Video component description explicitly references Phase-A.
-    expect(videoComponent.description).toMatch(/Phase-A/);
-    // No prepare-time per-frame extraction or ffmpeg-based frame ripper
-    // is wired into the Video component prepare. The component only
-    // probes metadata via the prepare() phase; per-frame DOM seek is
-    // the Phase-A mechanism.
+  it("uses extracted image frames as the documented playback path", () => {
+    expect(videoComponent.description).toMatch(/extracted image frames/);
+    // Component prepare still only probes metadata. Renderer-owned
+    // extraction augments prepared data before live DOM mount.
     expect(typeof videoComponent.prepare).toBe("function");
   });
 

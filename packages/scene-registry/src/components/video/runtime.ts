@@ -19,19 +19,13 @@ export interface VideoFrameExtractionMetadata {
 }
 
 /**
- * Build the Video component browser-side initial state. Mounts an inner
- * <video> element preloaded for programmatic playback (muted, preload
- * auto), wraps it in a positioned/clipped/effect-filtered container.
- *
- * The video element starts paused — the per-frame state handler in
- * live-dom.ts seeks it to the desired position each frame via the
- * shared __syncVideoElement helper, blocking capture until the seek
- * settles (T-044 / video-frame-sync R3).
+ * Build Video component browser-side initial state. Runtime uses extracted
+ * JPEG frame files, not HTMLVideoElement seeking.
  */
 export function buildVideoInitialState(
   options: VideoComponentOptions,
   video: VideoSettings,
-  resolvedUrl: string | null,
+  _resolvedUrl: string | null,
   frameExtraction?: VideoFrameExtractionMetadata | null
 ): VideoInitialState {
   const transformStyle = computeTransformStyle(options, {
@@ -55,30 +49,15 @@ export function buildVideoInitialState(
     containerStyle.filter = shadowFilter;
   }
 
-  const html = frameExtraction
-    ? buildImageSequenceMarkup(options)
-    : resolvedUrl
-      ? buildInnerMarkup(options, resolvedUrl)
-      : "";
+  const html = frameExtraction ? buildImageSequenceMarkup(options) : "";
   const initialOpacity = (options.opacity / 100) * computeTimingOpacity(0, options);
 
   return {
     html,
     containerStyle,
     initialOpacity,
-    sourceUrl: frameExtraction ? frameExtraction.urlPrefix : resolvedUrl
+    sourceUrl: frameExtraction ? frameExtraction.urlPrefix : null
   };
-}
-
-function buildInnerMarkup(options: VideoComponentOptions, url: string): string {
-  const fitMode = options.fitMode;
-  const filter = buildVideoFilter(options);
-  const muted = options.muted ? " muted" : "";
-  const video = `<video src="${escapeAttr(url)}" preload="auto" playsinline${muted} style="position:absolute;inset:0;width:100%;height:100%;object-fit:${fitMode};${filter ? `filter:${filter};` : ""}"></video>`;
-  const tint = options.tintEnabled
-    ? `<div style="position:absolute;inset:0;background:${withAlpha(options.tintColor, options.tintStrength / 100)};mix-blend-mode:multiply;"></div>`
-    : "";
-  return `${video}${tint}`;
 }
 
 function buildImageSequenceMarkup(options: VideoComponentOptions): string {
@@ -112,8 +91,4 @@ function buildShadowGlow(options: VideoComponentOptions): string {
     parts.push(`drop-shadow(0 0 ${options.glowStrength}px ${options.glowColor})`);
   }
   return parts.join(" ") || "none";
-}
-
-function escapeAttr(value: string): string {
-  return value.replace(/"/g, "&quot;");
 }

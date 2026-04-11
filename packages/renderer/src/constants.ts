@@ -33,9 +33,3 @@ export function normalizePositiveInteger(value: number | string | undefined) {
 
   return undefined;
 }
-
-export function isVideoFrameExtractionEnabled(
-  value: string | undefined = process.env.LYRIC_VIDEO_VIDEO_FRAME_EXTRACTION
-) {
-  return value === "1";
-}

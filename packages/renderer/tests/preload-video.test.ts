@@ -60,9 +60,17 @@ function instance(path: string): ValidatedSceneComponentInstance {
 }
 
 describe("preloadSceneAssets — video field support (T-011)", () => {
-  it("preloads video fields into the asset cache with content-type", async () => {
+  it("skips video fields by default because renderer uses extracted frames", async () => {
     const lookup = new Map([["video-preload-under-test", videoComponent]]);
     const assets = await preloadSceneAssets([instance(videoPath)], lookup, video, logger);
+    expect(assets.size).toBe(0);
+  });
+
+  it("preloads video fields into the asset cache with content-type", async () => {
+    const lookup = new Map([["video-preload-under-test", videoComponent]]);
+    const assets = await preloadSceneAssets([instance(videoPath)], lookup, video, logger, undefined, undefined, {
+      includeVideoAssets: true
+    });
     expect(assets.size).toBe(1);
     const asset = assets.get("vid-1:clip");
     expect(asset).toBeDefined();
@@ -74,7 +82,9 @@ describe("preloadSceneAssets — video field support (T-011)", () => {
     // The video field is declared inside a category — this test confirms
     // the preload loop flattens categories before looking for asset kinds.
     const lookup = new Map([["video-preload-under-test", videoComponent]]);
-    const assets = await preloadSceneAssets([instance(videoPath)], lookup, video, logger);
+    const assets = await preloadSceneAssets([instance(videoPath)], lookup, video, logger, undefined, undefined, {
+      includeVideoAssets: true
+    });
     expect(assets.get("vid-1:clip")).toBeDefined();
   });
 

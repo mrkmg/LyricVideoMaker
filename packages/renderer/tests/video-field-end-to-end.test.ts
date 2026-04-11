@@ -17,10 +17,8 @@ import type { PreloadedAsset, RenderLogger } from "../src/types";
  *
  * Exercises the full video-field-type pipeline without booting a real
  * playwright browser: validates a video field's required/accessibility
- * check, preloads the asset (kind="video", direct bytes, MIME from
- * extension), and confirms the browser asset-route handler serves those
- * bytes back with the expected Content-Type header — which is exactly
- * what a <video> element in the headless browser would receive.
+ * check, and confirms the legacy asset-route handler can still serve
+ * video bytes when explicitly requested by a test fixture.
  *
  * The throwaway component definition lives ONLY inside this test file;
  * it is intentionally never registered in builtInSceneComponents, so
@@ -113,7 +111,9 @@ describe("T-016 — video field type end-to-end plumbing", () => {
         throwawayVideoComponent as unknown as SceneComponentDefinition<Record<string, unknown>>
       ]
     ]);
-    const preloaded = await preloadSceneAssets([instance], lookup, videoJob, logger);
+    const preloaded = await preloadSceneAssets([instance], lookup, videoJob, logger, undefined, undefined, {
+      includeVideoAssets: true
+    });
     const asset = preloaded.get("test-1:clip");
     expect(asset).toBeDefined();
     expect(asset!.contentType).toBe("video/mp4");
@@ -137,7 +137,9 @@ describe("T-016 — video field type end-to-end plumbing", () => {
         throwawayVideoComponent as unknown as SceneComponentDefinition<Record<string, unknown>>
       ]
     ]);
-    const preloaded = await preloadSceneAssets([instance], lookup, videoJob, logger);
+    const preloaded = await preloadSceneAssets([instance], lookup, videoJob, logger, undefined, undefined, {
+      includeVideoAssets: true
+    });
     const asset = preloaded.get("test-2:clip") as PreloadedAsset;
 
     let captured: Record<string, unknown> = {};

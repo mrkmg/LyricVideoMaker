@@ -14,14 +14,8 @@ import type { VideoFrameExtractionEntry } from "../video-frame-extraction";
  * this is the MIME type detected from the file extension (video/mp4,
  * video/webm, video/quicktime, video/x-matroska).
  *
- * Range-request support (HTTP 206 / Content-Range) is NOT currently
- * implemented. Per the kit, this is an "implementation-time decision"
- * conditioned on whether the Phase-A verification (T-016 and T-059) with
- * a small mp4 plays successfully end-to-end through a single
- * content-typed response. If it does, no range support is needed; if a
- * future harness observes playback failures, this handler should be
- * extended to branch on the Range header and emit 206 slices. Left as a
- * documented Phase-B follow-up rather than speculative code.
+ * Video assets are legacy/test-only for this route. Built-in Video uses
+ * extracted JPEG frames served by fulfillVideoFrameRoute below.
  */
 export async function registerAssetRoutes(
   page: Page,

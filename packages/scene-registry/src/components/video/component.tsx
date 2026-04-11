@@ -19,28 +19,19 @@ const VIDEO_FRAME_EXTRACTION_PREPARED_KEY = "__videoFrameExtraction";
 /**
  * Video component (cavekit-video-component).
  *
- * Phase-A architecture:
- *   - The browser mounts an HTMLVideoElement preloaded for programmatic
- *     seek-driven playback. The video is muted by default and the
- *     component does NOT mix its audio track into the rendered output;
- *     the song remains the only audio source (R9).
+ * Architecture:
+ *   - Renderer extracts source video to JPEG frame files before Chromium
+ *     workers mount the scene.
  *   - prepare phase probes duration / dimensions / frame rate via
  *     ffprobe (R5) so the per-frame playback math never re-probes.
- *   - Per-frame state returns an opacity value plus a __videoSync
- *     payload consumed by the live-DOM handler (T-044) — the handler
- *     finds the <video> inside this component's layer, seeks to the
- *     requested time, and registers a readiness task so capture blocks
- *     until the seek settles (R8).
- *   - Phase-B fallback: if Phase-A sync proves unreliable in practice,
- *     the intended next step is per-frame pre-extraction of video
- *     frames to image files via ffmpeg. This is documented here as a
- *     follow-up rather than implemented (R10 AC4).
+ *   - Per-frame state maps playback time to extracted frame URL and
+ *     returns __imageFrameSync consumed by live DOM image readiness.
  */
 export const videoComponent: SceneComponentDefinition<VideoComponentOptions> = {
   id: "video",
   name: "Video",
   description:
-    "Positioned video playback synchronized to the song timeline (Phase-A: HTMLVideoElement + per-frame seek).",
+    "Positioned video playback synchronized to the song timeline via extracted image frames.",
   staticWhenMarkupUnchanged: false,
   options: videoOptionsSchema,
   defaultOptions: DEFAULT_VIDEO_OPTIONS,
@@ -95,18 +86,12 @@ export const videoComponent: SceneComponentDefinition<VideoComponentOptions> = {
           }
         };
       }
-      return {
-        opacity,
-        __videoSync: {
-          targetTimeSeconds: playback.targetTimeSeconds,
-          label: "video-component"
-        }
-      };
+      return { opacity };
     }
   },
-  Component: ({ instance, options, video, assets }) => {
+  Component: ({ instance, options, video, assets, prepared }) => {
     const url = assets.getUrl(instance.id, "source");
-    const initial = buildVideoInitialState(options, video, url);
+    const initial = buildVideoInitialState(options, video, url, getVideoFrameExtraction(prepared));
     if (!initial.sourceUrl) {
       return null;
     }

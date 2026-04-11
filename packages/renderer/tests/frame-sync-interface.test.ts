@@ -8,9 +8,9 @@ import type {
 } from "@lyric-video-maker/core";
 
 /**
- * T-046 — video-frame-sync R5: the public scene-component definition
+ * Public scene-component definition
  * interface and the public render-prop interface must have the SAME shape
- * before and after the video-frame-sync kit.
+ * remains unchanged by internal frame-readiness state.
  *
  * Strategy: pin the keys of each interface with compile-time type guards
  * plus a runtime shape check against a declared reference. If a future

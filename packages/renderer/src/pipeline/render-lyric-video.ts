@@ -9,7 +9,7 @@ import { isAbortError, throwIfAborted } from "../abort";
 import { createAudioAnalysisAccessor } from "../audio-analysis";
 import { createAssetAccessor, preloadSceneAssets } from "../assets/preload";
 import { createLiveDomRenderSession } from "../browser/live-dom-session";
-import { isVideoFrameExtractionEnabled, PROGRESS_INTERVAL_MS } from "../constants";
+import { PROGRESS_INTERVAL_MS } from "../constants";
 import { startFrameMuxer } from "../ffmpeg/frame-muxer";
 import { createMuxPipelineDiagnostics } from "../ffmpeg/mux-diagnostics";
 import { canRenderWithLiveDom, createLiveDomScenePayload } from "../live-dom";
@@ -30,7 +30,6 @@ import { renderWorkerFrames } from "./worker-frames";
 import {
   cleanupVideoFrameExtractions,
   prepareVideoFrameExtractions,
-  renderUsesVideoComponents,
   type VideoFrameExtractionEntry
 } from "../video-frame-extraction";
 
@@ -107,12 +106,6 @@ export async function renderLyricVideo({
     logger.info(
       `Starting render at ${job.video.width}x${job.video.height} ${job.video.fps}fps with ${job.video.durationInFrames} frames.`
     );
-    if (renderUsesVideoComponents(enabledComponents)) {
-      logger.info(
-        `Phase B video frame extraction flag is ${isVideoFrameExtractionEnabled() ? "active" : "inactive"}.`
-      );
-    }
-
     const initialLyricsRuntime = createLyricRuntime(job.lyrics, 0);
     const prepared =
       (await measureAsync(profiler, "prepare", async () => {

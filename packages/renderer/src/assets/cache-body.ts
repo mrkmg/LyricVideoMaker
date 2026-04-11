@@ -46,9 +46,9 @@ export async function createCachedAssetBody(
   kind: CachedAssetKind = "image"
 ): Promise<CachedAssetBody> {
   if (kind === "video") {
-    // Video bodies are served straight from disk without normalization. The
-    // content-type is taken from MIME detection so the headless browser can
-    // play the response via a <video> element.
+    // Video bodies are served straight from disk without normalization for
+    // explicit legacy/test callers. Built-in video rendering uses extracted
+    // JPEG frame files instead.
     return {
       body: await readFile(path),
       contentType: getMimeType(path),

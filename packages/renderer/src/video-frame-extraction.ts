@@ -9,7 +9,6 @@ import type {
 } from "@lyric-video-maker/core";
 import {
   FFMPEG_EXECUTABLE,
-  isVideoFrameExtractionEnabled,
   VIDEO_FRAME_URL_PREFIX
 } from "./constants";
 import { isAbortError } from "./abort";
@@ -36,12 +35,7 @@ export interface VideoFrameExtractionEntry {
 }
 
 export interface VideoFrameExtractionResult {
-  enabled: boolean;
   entries: VideoFrameExtractionEntry[];
-}
-
-export function renderUsesVideoComponents(components: ValidatedSceneComponentInstance[]) {
-  return components.some((component) => component.enabled && component.componentId === "video");
 }
 
 export async function prepareVideoFrameExtractions({
@@ -61,17 +55,13 @@ export async function prepareVideoFrameExtractions({
   logger: RenderLogger;
   runFfmpeg?: (command: string, args: string[], signal?: AbortSignal) => Promise<string>;
 }): Promise<VideoFrameExtractionResult> {
-  const enabled = isVideoFrameExtractionEnabled();
   const videoComponents = components.filter((component) => component.enabled && component.componentId === "video");
 
   if (videoComponents.length === 0) {
-    return { enabled, entries: [] };
+    return { entries: [] };
   }
 
-  logger.info(`Video frame extraction ${enabled ? "enabled" : "disabled"} for final render.`);
-  if (!enabled) {
-    return { enabled: false, entries: [] };
-  }
+  logger.info("Video frame extraction active.");
 
   const entries: VideoFrameExtractionEntry[] = [];
   for (const instance of videoComponents) {
@@ -141,7 +131,7 @@ export async function prepareVideoFrameExtractions({
     }
   }
 
-  return { enabled: true, entries };
+  return { entries };
 }
 
 export async function cleanupVideoFrameExtractions(entries: VideoFrameExtractionEntry[]) {
