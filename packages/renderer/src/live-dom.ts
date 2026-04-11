@@ -709,6 +709,42 @@ export function renderPageShell(): string {
           }
         }
 
+        // ────────────────────────────────────────────────────────────────
+        // Live-DOM runtime registry.
+        //
+        // Each browser runtime exposes mount(layer, initialState) which
+        // returns a handle, and update(handle, state) which applies a new
+        // per-frame state to the mounted DOM. Runtimes are keyed by
+        // runtimeId and looked up in the registry below.
+        //
+        // Per-frame readiness contract (video-frame-sync R6, T-047):
+        //   Components that need asynchronous DOM work to settle before
+        //   capture (notably the Video component, which must seek a
+        //   <video> element to a target time before screenshotting)
+        //   participate implicitly via their per-frame state shape:
+        //
+        //     state.__videoSync = { targetTimeSeconds: number, label?: string }
+        //
+        //   The __renderLiveDomFrame wrapper (below) looks for this shape
+        //   on every component's state, finds <video> elements inside
+        //   that component's layer, and — via window.__syncVideoElement —
+        //   seeks any whose currentTime differs from the target by more
+        //   than VIDEO_SEEK_EPSILON_SECONDS. Each outstanding seek
+        //   registers a readiness task on window.__frameReadiness, and
+        //   the Node-side capture loop awaits __frameReadiness.awaitAll()
+        //   before screenshotting the current frame. A bounded timeout
+        //   (VIDEO_SEEK_TIMEOUT_MS) resolves stuck seeks without
+        //   aborting the render; timeout events are drained back to Node
+        //   for logging.
+        //
+        //   The contract is deliberately component-agnostic: any async
+        //   task can register itself on __frameReadiness, and future
+        //   features beyond video seeks will reuse the same gate.
+        //
+        //   The public scene-component and render-prop interfaces remain
+        //   unchanged — runtimes participate purely by returning state in
+        //   the appropriate shape from getFrameState.
+        // ────────────────────────────────────────────────────────────────
         const runtimeRegistry = {
           "background-image": {
             mount(layer, initialState) {
