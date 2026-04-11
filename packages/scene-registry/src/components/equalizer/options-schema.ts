@@ -1,16 +1,17 @@
 import type { SceneOptionEntry } from "@lyric-video-maker/core";
+import { transformCategory } from "../../shared";
 import type { EqualizerOptions } from "./types";
 
 export const equalizerOptionsSchema: SceneOptionEntry[] = [
   {
     type: "category",
-    id: "placement",
-    label: "Placement",
+    id: "layout",
+    label: "Layout",
     options: [
       {
         type: "select",
         id: "placement",
-        label: "Placement",
+        label: "Orientation",
         defaultValue: "bottom-center",
         options: [
           { label: "Bottom Center", value: "bottom-center" },
@@ -23,10 +24,6 @@ export const equalizerOptionsSchema: SceneOptionEntry[] = [
           { label: "Center Vertical", value: "center-vertical" }
         ]
       },
-      { type: "number", id: "spanPercent", label: "Span Percent", defaultValue: 56, min: 10, max: 100, step: 1 },
-      { type: "number", id: "depthPercent", label: "Depth Percent", defaultValue: 14, min: 4, max: 40, step: 1 },
-      { type: "number", id: "offsetX", label: "Offset X", defaultValue: 0, min: -960, max: 960, step: 1 },
-      { type: "number", id: "offsetY", label: "Offset Y", defaultValue: 0, min: -540, max: 540, step: 1 },
       { type: "number", id: "innerPadding", label: "Inner Padding", defaultValue: 24, min: 0, max: 160, step: 1 },
       {
         type: "select",
@@ -41,6 +38,7 @@ export const equalizerOptionsSchema: SceneOptionEntry[] = [
       }
     ]
   },
+  transformCategory,
   {
     type: "category",
     id: "graph",
@@ -183,11 +181,15 @@ export const equalizerOptionsSchema: SceneOptionEntry[] = [
 ];
 
 export const equalizerDefaultOptions: EqualizerOptions = {
+  x: 50,
+  y: 98,
+  width: 56,
+  height: 14,
+  anchor: "bottom-center",
+  rotation: 0,
+  flipHorizontal: false,
+  flipVertical: false,
   placement: "bottom-center",
-  spanPercent: 56,
-  depthPercent: 14,
-  offsetX: 0,
-  offsetY: 0,
   innerPadding: 24,
   alignment: "center",
   graphMode: "bars",

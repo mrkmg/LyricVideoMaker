@@ -1,5 +1,6 @@
 import type { SceneOptionEntry } from "@lyric-video-maker/core";
 import { SUPPORTED_FONT_FAMILIES } from "@lyric-video-maker/core";
+import { transformCategory } from "../../shared";
 import type { LyricsByLineOptions } from "./types";
 
 export const lyricsByLineOptionsSchema: SceneOptionEntry[] = [
@@ -34,6 +35,7 @@ export const lyricsByLineOptionsSchema: SceneOptionEntry[] = [
       }
     ]
   },
+  transformCategory,
   {
     type: "category",
     id: "fade-in",
@@ -133,6 +135,14 @@ export const lyricsByLineOptionsSchema: SceneOptionEntry[] = [
 ];
 
 export const lyricsByLineDefaultOptions: LyricsByLineOptions = {
+  x: 50,
+  y: 50,
+  width: 100,
+  height: 100,
+  anchor: "middle-center",
+  rotation: 0,
+  flipHorizontal: false,
+  flipVertical: false,
   lyricSize: 72,
   forceSingleLine: false,
   horizontalPadding: 140,

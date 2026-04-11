@@ -16,13 +16,15 @@ import type { EqualizerOptions, PreparedEqualizerData } from "./types";
 export function getEqualizerInitialBrowserState({
   instance,
   options,
-  prepared
+  prepared,
+  video
 }: SceneBrowserInitialStateContext<EqualizerOptions>) {
   const preparedData = prepared as unknown as PreparedEqualizerData;
   return createEqualizerBrowserInitialState(
     instance.id,
     options,
-    preparedData.frames?.[0] ?? []
+    preparedData.frames?.[0] ?? [],
+    video
   );
 }
 
@@ -38,9 +40,10 @@ export function getEqualizerFrameBrowserState({
 export function createEqualizerBrowserInitialState(
   instanceId: string,
   options: EqualizerOptions,
-  initialValues: number[]
+  initialValues: number[],
+  video: { width: number; height: number } = { width: 1920, height: 1080 }
 ) {
-  const staticValues = getEqualizerStaticValues(instanceId, options, initialValues.length);
+  const staticValues = getEqualizerStaticValues(instanceId, options, initialValues.length, video);
   const values = buildRenderableBars(initialValues, options);
   const colors = buildEqualizerColorPlan(values, options);
 

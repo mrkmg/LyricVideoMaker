@@ -1,5 +1,7 @@
 import { DEFAULT_VIDEO_HEIGHT, DEFAULT_VIDEO_WIDTH } from "@lyric-video-maker/core";
 import { safeScale } from "../../shared/math";
+import { computeTransformStyle } from "../../shared/transform-runtime";
+import type { TransformOptions } from "../../shared";
 import { lyricBlockStyleCache, lyricScaledLayoutCache, setCachedValue } from "./caches";
 import {
   LYRIC_VERTICAL_INSET,
@@ -79,6 +81,33 @@ export function getScaledLyricLayout(
   };
   setCachedValue(lyricScaledLayoutCache, cacheKey, nextValue);
   return nextValue;
+}
+
+export function getLyricContainerStyle(
+  video: { width: number; height: number },
+  options: LyricsByLineOptions
+) {
+  return computeTransformStyle(getLyricTransformOptions(options), video);
+}
+
+export function getLyricContainerPixelWidth(
+  video: { width: number; height: number },
+  options: Pick<LyricsByLineOptions, "width">
+) {
+  return Math.max(1, (video.width * (options.width ?? 100)) / 100);
+}
+
+function getLyricTransformOptions(options: LyricsByLineOptions): TransformOptions {
+  return {
+    x: options.x ?? 50,
+    y: options.y ?? 50,
+    width: options.width ?? 100,
+    height: options.height ?? 100,
+    anchor: options.anchor ?? "middle-center",
+    rotation: options.rotation ?? 0,
+    flipHorizontal: options.flipHorizontal ?? false,
+    flipVertical: options.flipVertical ?? false
+  };
 }
 
 export function getLyricScale(video: { width: number; height: number }): LyricScale {

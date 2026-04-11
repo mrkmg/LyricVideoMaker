@@ -8,15 +8,22 @@ const equalizerStaticValueCache = new Map<string, EqualizerStaticValues>();
 export function getEqualizerStaticValues(
   instanceId: string,
   options: EqualizerOptions,
-  barCount: number
+  barCount: number,
+  video: { width: number; height: number } = { width: 1920, height: 1080 }
 ): EqualizerStaticValues {
   const cacheKey = JSON.stringify({
     instanceId,
+    videoWidth: video.width,
+    videoHeight: video.height,
+    x: options.x,
+    y: options.y,
+    width: options.width,
+    height: options.height,
+    anchor: options.anchor,
+    rotation: options.rotation,
+    flipHorizontal: options.flipHorizontal,
+    flipVertical: options.flipVertical,
     placement: options.placement,
-    spanPercent: options.spanPercent,
-    depthPercent: options.depthPercent,
-    offsetX: options.offsetX,
-    offsetY: options.offsetY,
     innerPadding: options.innerPadding,
     alignment: options.alignment,
     graphMode: options.graphMode,
@@ -46,7 +53,7 @@ export function getEqualizerStaticValues(
     return cached;
   }
 
-  const layout = getEqualizerLayout(options);
+  const layout = getEqualizerLayout(options, video);
   const nextValue = {
     layout,
     barStyle: {

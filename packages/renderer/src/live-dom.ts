@@ -919,9 +919,10 @@ export function renderPageShell(): string {
           "lyrics-by-line": {
               mount(layer, initialState) {
                 const wrapper = document.createElement("div");
+                if (initialState && initialState.containerStyle) {
+                  applyStyles(wrapper, initialState.containerStyle);
+                }
                 applyStyles(wrapper, {
-                  position: "absolute",
-                  inset: "0",
                   display: "flex",
                   justifyContent: "center",
                   boxSizing: "border-box",

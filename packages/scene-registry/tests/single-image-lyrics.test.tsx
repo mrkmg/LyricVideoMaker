@@ -749,10 +749,11 @@ describe("scene registry components", () => {
       flexDirection: "column"
     });
     const wrapper = track?.parentElement as HTMLElement;
-    expect(wrapper.style.right).toBe("24px");
-    expect(wrapper.style.bottom).toBe("0px");
-    expect(wrapper.style.width).toBe("14%");
-    expect(wrapper.style.height).toBe("56%");
+    expect(wrapper.style.left).toBe("50%");
+    expect(wrapper.style.top).toBe("98%");
+    expect(wrapper.style.width).toBe("56%");
+    expect(wrapper.style.height).toBe("14%");
+    expect(wrapper.style.transform).toBe("translate(-50%, -100%)");
   });
 
   it("builds live DOM equalizer line state with intensity colors", () => {

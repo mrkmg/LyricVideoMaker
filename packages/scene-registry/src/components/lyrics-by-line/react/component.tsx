@@ -1,6 +1,11 @@
 import React from "react";
 import type { SceneRenderProps } from "@lyric-video-maker/core";
-import { getLyricBlockStyles, getScaledLyricLayout } from "../layout";
+import {
+  getLyricBlockStyles,
+  getLyricContainerPixelWidth,
+  getLyricContainerStyle,
+  getScaledLyricLayout
+} from "../layout";
 import { getLyricOpacity } from "../fade";
 import {
   createTextShadow,
@@ -30,6 +35,8 @@ export function LyricsByLineRenderComponent({
     scaledLayout.horizontalPadding,
     scaledLayout.verticalInset
   );
+  const containerStyle = getLyricContainerStyle(video, options);
+  const containerWidth = getLyricContainerPixelWidth(video, options);
   const estimatedPaintPadding = getLyricPaintPadding(scaledLayout.lyricSize, {
     borderEnabled: options.borderEnabled,
     borderThickness: scaledLayout.borderThickness,
@@ -43,7 +50,7 @@ export function LyricsByLineRenderComponent({
       forceSingleLine: options.forceSingleLine,
       lyricFont: options.lyricFont
     },
-    video.width,
+    containerWidth,
     lyricBlockStyles.horizontalPadding,
     estimatedPaintPadding
   );
@@ -65,8 +72,7 @@ export function LyricsByLineRenderComponent({
   return (
     <div
       style={{
-        position: "absolute",
-        inset: 0,
+        ...containerStyle,
         display: "flex",
         alignItems: lyricBlockStyles.alignItems,
         justifyContent: "center",

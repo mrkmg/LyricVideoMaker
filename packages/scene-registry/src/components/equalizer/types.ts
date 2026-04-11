@@ -1,4 +1,5 @@
 import type React from "react";
+import type { TransformOptions } from "../../shared";
 
 export type EqualizerPlacement =
   | "bottom-center"
@@ -25,12 +26,8 @@ export type EqualizerLineBaseline =
   | "center-horizontal"
   | "center-vertical";
 
-export interface EqualizerOptions {
+export interface EqualizerOptions extends TransformOptions {
   placement: EqualizerPlacement;
-  spanPercent: number;
-  depthPercent: number;
-  offsetX: number;
-  offsetY: number;
   innerPadding: number;
   alignment: EqualizerAlignment;
   graphMode: EqualizerGraphMode;

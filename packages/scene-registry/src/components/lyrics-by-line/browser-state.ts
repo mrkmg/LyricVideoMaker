@@ -2,7 +2,12 @@ import type {
   SceneBrowserFrameStateContext,
   SceneBrowserInitialStateContext
 } from "@lyric-video-maker/core";
-import { getLyricBlockStyles, getScaledLyricLayout } from "./layout";
+import {
+  getLyricBlockStyles,
+  getLyricContainerPixelWidth,
+  getLyricContainerStyle,
+  getScaledLyricLayout
+} from "./layout";
 import { getLyricOpacity } from "./fade";
 import {
   createTextShadow,
@@ -22,8 +27,10 @@ export function getLyricsByLineInitialBrowserState({
     scaledLayout.horizontalPadding,
     scaledLayout.verticalInset
   );
+  const containerStyle = getLyricContainerStyle(video, options);
 
   return {
+    containerStyle,
     alignItems: lyricBlockStyles.alignItems,
     padding: lyricBlockStyles.padding,
     horizontalPadding: lyricBlockStyles.horizontalPadding,
@@ -51,6 +58,7 @@ export function getLyricsByLineFrameBrowserState({
     scaledLayout.horizontalPadding,
     scaledLayout.verticalInset
   );
+  const containerWidth = getLyricContainerPixelWidth(video, options);
   const paintPadding = getLyricPaintPadding(scaledLayout.lyricSize, {
     borderEnabled: options.borderEnabled,
     borderThickness: scaledLayout.borderThickness,
@@ -64,7 +72,7 @@ export function getLyricsByLineFrameBrowserState({
       forceSingleLine: options.forceSingleLine,
       lyricFont: options.lyricFont
     },
-    video.width,
+    containerWidth,
     lyricBlockStyles.horizontalPadding,
     paintPadding
   );

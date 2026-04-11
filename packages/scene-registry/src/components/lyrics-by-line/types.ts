@@ -1,3 +1,5 @@
+import type { TransformOptions } from "../../shared";
+
 export type LyricFadeEasing = "linear" | "ease-in" | "ease-out" | "ease-in-out";
 export type LyricVerticalPosition = "top" | "middle" | "bottom";
 
@@ -14,7 +16,7 @@ export interface ScaledLyricLayout {
   borderThickness: number;
 }
 
-export interface LyricsByLineOptions {
+export interface LyricsByLineOptions extends TransformOptions {
   lyricSize: number;
   forceSingleLine: boolean;
   horizontalPadding: number;
