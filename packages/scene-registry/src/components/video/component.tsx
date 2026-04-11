@@ -35,7 +35,7 @@ export const videoComponent: SceneComponentDefinition<VideoComponentOptions> = {
   name: "Video",
   description:
     "Positioned video playback synchronized to the song timeline (Phase-A: HTMLVideoElement + per-frame seek).",
-  staticWhenMarkupUnchanged: true,
+  staticWhenMarkupUnchanged: false,
   options: videoOptionsSchema,
   defaultOptions: DEFAULT_VIDEO_OPTIONS,
   getPrepareCacheKey: ({ instance, options, video, audioPath }) => {

@@ -5,6 +5,8 @@ import { FRAME_READINESS_SCRIPT_SOURCE } from "../src/live-dom";
 // syncVideoElement touches.
 class FakeVideo {
   public currentTime = 0;
+  public duration = 10;
+  public readyState = 2;
   private listeners = new Map<string, Array<(event?: unknown) => void>>();
 
   addEventListener(event: string, handler: (event?: unknown) => void, _options?: unknown) {
@@ -18,6 +20,22 @@ class FakeVideo {
     if (!list) return;
     const next = list.filter((h) => h !== handler);
     this.listeners.set(event, next);
+  }
+
+  load() {
+    // Real HTMLVideoElement.load() starts async loading; metadata arrives later.
+  }
+
+  dispatchLoadedMetadata() {
+    this.readyState = Math.max(this.readyState, 1);
+    const list = this.listeners.get("loadedmetadata") ?? [];
+    list.slice().forEach((handler) => handler());
+  }
+
+  dispatchLoadedData() {
+    this.readyState = Math.max(this.readyState, 2);
+    const list = this.listeners.get("loadeddata") ?? [];
+    list.slice().forEach((handler) => handler());
   }
 
   dispatchSeeked() {
@@ -138,6 +156,21 @@ describe("__syncVideoElement — live-DOM seek handler (T-044)", () => {
     const readiness = w.__syncVideoElement(video, 1.001, "within-epsilon");
     expect(readiness).toBeNull();
     expect(video.currentTime).toBe(1.0);
+  });
+
+  it("waits for metadata before seeking an unloaded video", async () => {
+    const w = installScript();
+    const video = new FakeVideo();
+    video.readyState = 0;
+    video.currentTime = 0;
+    const readiness = w.__syncVideoElement(video, 2.0, "unloaded");
+    expect(readiness).not.toBeNull();
+    expect(video.currentTime).toBe(0);
+    video.dispatchLoadedMetadata();
+    expect(video.currentTime).toBe(2.0);
+    video.dispatchSeeked();
+    video.dispatchLoadedData();
+    await readiness!;
   });
 
   it("registers independent readiness tasks for two videos on the same frame", async () => {

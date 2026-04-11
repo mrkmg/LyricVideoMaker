@@ -293,26 +293,87 @@ export const FRAME_READINESS_SCRIPT_SOURCE = `
       return null;
     }
     var currentTime = typeof video.currentTime === "number" ? video.currentTime : 0;
-    if (Math.abs(currentTime - targetTimeSeconds) < VIDEO_SEEK_EPSILON_SECONDS) {
+    function hasMetadata() {
+      return typeof video.readyState !== "number" || video.readyState >= 1;
+    }
+    function hasDecodedFrame() {
+      return typeof video.readyState !== "number" || video.readyState >= 2;
+    }
+    if (
+      Math.abs(currentTime - targetTimeSeconds) < VIDEO_SEEK_EPSILON_SECONDS &&
+      hasDecodedFrame()
+    ) {
       return null;
     }
     return new Promise(function(resolve) {
       var settled = false;
       var timer = null;
+      var seekIssued = false;
       function finish() {
         if (settled) return;
         settled = true;
         if (timer !== null) { clearTimeout(timer); }
+        video.removeEventListener("loadedmetadata", onReady);
+        video.removeEventListener("loadeddata", onReady);
+        video.removeEventListener("canplay", onReady);
+        video.removeEventListener("loadeddata", onDecodedAfterSeek);
+        video.removeEventListener("canplay", onDecodedAfterSeek);
         video.removeEventListener("seeked", onSeeked);
         video.removeEventListener("error", onError);
         resolve();
       }
-      function onSeeked() { finish(); }
+      function safeTargetTime() {
+        if (typeof video.duration === "number" && isFinite(video.duration) && video.duration > 0) {
+          return Math.max(0, Math.min(targetTimeSeconds, Math.max(0, video.duration - 1 / 240)));
+        }
+        return Math.max(0, targetTimeSeconds);
+      }
+      function maybeFinishWithoutSeek() {
+        currentTime = typeof video.currentTime === "number" ? video.currentTime : 0;
+        if (
+          Math.abs(currentTime - safeTargetTime()) < VIDEO_SEEK_EPSILON_SECONDS &&
+          hasDecodedFrame()
+        ) {
+          finish();
+          return true;
+        }
+        return false;
+      }
+      function issueSeekWhenReady() {
+        if (settled || seekIssued || !hasMetadata()) {
+          return;
+        }
+        if (maybeFinishWithoutSeek()) {
+          return;
+        }
+        seekIssued = true;
+        try {
+          video.currentTime = safeTargetTime();
+        } catch (error) {
+          finish();
+        }
+      }
+      function onReady() { issueSeekWhenReady(); }
+      function onSeeked() {
+        if (hasDecodedFrame()) {
+          finish();
+          return;
+        }
+        video.addEventListener("loadeddata", onDecodedAfterSeek, { once: true });
+        video.addEventListener("canplay", onDecodedAfterSeek, { once: true });
+      }
+      function onDecodedAfterSeek() { finish(); }
       function onError() { finish(); }
+      video.addEventListener("loadedmetadata", onReady, { once: true });
+      video.addEventListener("loadeddata", onReady, { once: true });
+      video.addEventListener("canplay", onReady, { once: true });
       video.addEventListener("seeked", onSeeked, { once: true });
       video.addEventListener("error", onError, { once: true });
       try {
-        video.currentTime = targetTimeSeconds;
+        if (!hasMetadata()) {
+          video.load();
+        }
+        issueSeekWhenReady();
       } catch (error) {
         finish();
         return;

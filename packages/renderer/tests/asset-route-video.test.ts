@@ -5,9 +5,13 @@ import type { PreloadedAsset, RenderLogger } from "../src/types";
 
 const logger: RenderLogger = { info: () => {}, warn: () => {}, error: () => {} };
 
-function makeRoute(url: string, fulfill: (args: unknown) => void): Route {
+function makeRoute(
+  url: string,
+  fulfill: (args: unknown) => void,
+  headers: Record<string, string> = {}
+): Route {
   return {
-    request: () => ({ url: () => url }),
+    request: () => ({ url: () => url, headers: () => headers }),
     fulfill: async (args: unknown) => fulfill(args)
   } as unknown as Route;
 }
@@ -33,7 +37,37 @@ describe("asset route serves video bodies with content-type (T-012)", () => {
     expect(captured.status).toBe(200);
     const headers = captured.headers as Record<string, string>;
     expect(headers["Content-Type"]).toBe("video/mp4");
+    expect(headers["Accept-Ranges"]).toBe("bytes");
     expect(captured.body).toBe(asset.body);
+  });
+
+  it("fulfills video byte-range requests with 206 partial content", async () => {
+    const asset: PreloadedAsset = {
+      instanceId: "v1",
+      optionId: "clip",
+      path: "/tmp/clip.mp4",
+      url: "https://asset.lyric-video/v1-clip.mp4",
+      contentType: "video/mp4",
+      body: Buffer.from([0, 1, 2, 3, 4])
+    };
+    const assets = new Map([["v1:clip", asset]]);
+
+    let captured: Record<string, unknown> = {};
+    const route = makeRoute(
+      asset.url,
+      (args) => {
+        captured = args as Record<string, unknown>;
+      },
+      { range: "bytes=1-3" }
+    );
+    await fulfillAssetRoute(route, assets, logger);
+
+    expect(captured.status).toBe(206);
+    expect(captured.body).toEqual(Buffer.from([1, 2, 3]));
+    const headers = captured.headers as Record<string, string>;
+    expect(headers["Content-Range"]).toBe("bytes 1-3/5");
+    expect(headers["Accept-Ranges"]).toBe("bytes");
+    expect(headers["Content-Length"]).toBe("3");
   });
 
   it("also serves webm/mov/mkv content-types without modification", async () => {

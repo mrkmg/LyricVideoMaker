@@ -7,7 +7,6 @@ import { throwIfAborted } from "../abort";
 import { createAudioAnalysisAccessor } from "../audio-analysis";
 import { createAssetAccessor, preloadSceneAssets } from "../assets/preload";
 import { createLiveDomRenderSession } from "../browser/live-dom-session";
-import { shouldUseBeginFrame } from "../browser/chromium-loader";
 import { canRenderWithLiveDom, createLiveDomScenePayload } from "../live-dom";
 import { createRenderLogger } from "../logging";
 import { createPreviewProfiler, measurePreviewStage } from "../profiling";
@@ -78,7 +77,6 @@ export async function createFramePreviewSession({
   );
   return await createLiveDomRenderSession({
     sessionLabel: "preview",
-    preferBeginFrame: shouldUseBeginFrame(),
     job,
     componentLookup,
     components: enabledComponents,

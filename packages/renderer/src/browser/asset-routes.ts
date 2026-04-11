@@ -50,12 +50,87 @@ export async function fulfillAssetRoute(
     return;
   }
 
+  const request = route.request();
+  const headers = typeof request.headers === "function" ? request.headers() : {};
+  const rangeHeader = headers["range"];
+  if (rangeHeader && asset.contentType.startsWith("video/")) {
+    const range = parseByteRange(rangeHeader, asset.body.byteLength);
+    if (!range) {
+      await route.fulfill({
+        status: 416,
+        body: "",
+        headers: {
+          "Content-Range": `bytes */${asset.body.byteLength}`,
+          "Accept-Ranges": "bytes"
+        }
+      });
+      return;
+    }
+
+    const chunk = asset.body.subarray(range.start, range.end + 1);
+    await route.fulfill({
+      status: 206,
+      body: chunk,
+      headers: {
+        "Content-Type": asset.contentType,
+        "Content-Length": String(chunk.byteLength),
+        "Content-Range": `bytes ${range.start}-${range.end}/${asset.body.byteLength}`,
+        "Accept-Ranges": "bytes",
+        "Cache-Control": "public, max-age=31536000, immutable"
+      }
+    });
+    return;
+  }
+
   await route.fulfill({
     status: 200,
     body: asset.body,
     headers: {
       "Content-Type": asset.contentType,
+      "Content-Length": String(asset.body.byteLength),
+      ...(asset.contentType.startsWith("video/") ? { "Accept-Ranges": "bytes" } : {}),
       "Cache-Control": "public, max-age=31536000, immutable"
     }
   });
+}
+
+function parseByteRange(
+  rangeHeader: string,
+  size: number
+): { start: number; end: number } | null {
+  const match = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader.trim());
+  if (!match || size <= 0) {
+    return null;
+  }
+
+  const [, rawStart, rawEnd] = match;
+  if (!rawStart && !rawEnd) {
+    return null;
+  }
+
+  if (!rawStart) {
+    const suffixLength = Number(rawEnd);
+    if (!Number.isInteger(suffixLength) || suffixLength <= 0) {
+      return null;
+    }
+    const start = Math.max(size - suffixLength, 0);
+    return { start, end: size - 1 };
+  }
+
+  const start = Number(rawStart);
+  const end = rawEnd ? Number(rawEnd) : size - 1;
+  if (
+    !Number.isInteger(start) ||
+    !Number.isInteger(end) ||
+    start < 0 ||
+    end < start ||
+    start >= size
+  ) {
+    return null;
+  }
+
+  return {
+    start,
+    end: Math.min(end, size - 1)
+  };
 }

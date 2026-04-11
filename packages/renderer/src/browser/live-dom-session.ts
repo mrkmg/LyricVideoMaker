@@ -33,7 +33,7 @@ import type {
   RenderProfiler
 } from "../types";
 import { captureFrameBuffer } from "./capture";
-import { getBeginFrameLaunchArgs, loadChromium } from "./chromium-loader";
+import { loadChromium } from "./chromium-loader";
 import { wirePageDiagnostics } from "./diagnostics";
 import { disposePreviewBrowserResources } from "./dispose";
 import { registerAssetRoutes } from "./asset-routes";
@@ -41,7 +41,6 @@ import { createRenderPage } from "./render-page";
 
 export async function createLiveDomRenderSession({
   sessionLabel,
-  preferBeginFrame,
   job,
   componentLookup,
   components,
@@ -55,7 +54,6 @@ export async function createLiveDomRenderSession({
   previewProfiler
 }: {
   sessionLabel: string;
-  preferBeginFrame: boolean;
   job: RenderJob;
   componentLookup: Map<string, SceneComponentDefinition<Record<string, unknown>>>;
   components: ValidatedSceneComponentInstance[];
@@ -73,22 +71,19 @@ export async function createLiveDomRenderSession({
   let page: Page | null = null;
   let cdpSession: CDPSession | null = null;
   let disposed = false;
-  let beginFrameFallbackLogged = false;
   let renderChain = Promise.resolve();
   const lyricRuntimeCursor = createLyricRuntimeCursor(job.lyrics, 0);
 
   try {
     const chromium = await loadChromium();
     browser = await chromium.launch({
-      headless: true,
-      args: getBeginFrameLaunchArgs(preferBeginFrame)
+      headless: true
     });
 
     const renderPage = await createRenderPage({
       browser,
       width: job.video.width,
-      height: job.video.height,
-      preferBeginFrame
+      height: job.video.height
     });
     browserContext = renderPage.context;
     page = renderPage.page;
@@ -170,11 +165,7 @@ export async function createLiveDomRenderSession({
           return await withTimeout(
             maybeMeasureAsync(profiler, "capture", async () => {
               return await captureFrameBuffer({
-                cdpSession: cdpSession!,
-                fps: job.video.fps,
-                preferBeginFrame,
-                logger,
-                beginFrameFallbackLogged
+                cdpSession: cdpSession!
               });
             }),
             createFrameStageTimeoutError({
@@ -186,10 +177,9 @@ export async function createLiveDomRenderSession({
           );
         }, { frame: safeFrame, timeMs });
         traceRenderStep(logger, sessionLabel, safeFrame, "capture-done");
-        beginFrameFallbackLogged = capture.beginFrameFallbackLogged;
 
         return {
-          png: capture.buffer,
+          png: capture,
           frame: safeFrame,
           timeMs
         };

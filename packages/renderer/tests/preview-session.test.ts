@@ -78,7 +78,6 @@ import { createFramePreviewSession, createPreviewComputationCache } from "../src
 
 describe("createFramePreviewSession", () => {
   beforeEach(() => {
-    process.env.LYRIC_VIDEO_RENDER_USE_BEGIN_FRAME = "0";
     previewRuntime.launchMock.mockClear();
     previewRuntime.browser.newContext.mockClear();
     previewRuntime.browser.close.mockClear();

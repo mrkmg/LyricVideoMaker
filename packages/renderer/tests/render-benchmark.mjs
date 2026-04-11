@@ -15,7 +15,6 @@ const subtitlePath = join(workspace, "lyrics.srt");
 const imagePath = join(workspace, "background.png");
 const outputPath = join(workspace, "output.mp4");
 const benchmarkMode = process.env.LYRIC_VIDEO_BENCHMARK_MODE ?? "standard";
-const useBeginFrame = process.env.LYRIC_VIDEO_RENDER_USE_BEGIN_FRAME !== "0";
 
 try {
   const benchmark = createBenchmarkScenario(benchmarkMode);
@@ -76,7 +75,6 @@ try {
     JSON.stringify(
       {
         mode: benchmarkMode,
-        useBeginFrame,
         durationMs,
         frames: job.video.durationInFrames,
         elapsedMs: Number(elapsedMs.toFixed(2)),

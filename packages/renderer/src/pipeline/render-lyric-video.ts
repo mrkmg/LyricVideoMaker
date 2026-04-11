@@ -8,7 +8,6 @@ import {
 import { isAbortError, throwIfAborted } from "../abort";
 import { createAudioAnalysisAccessor } from "../audio-analysis";
 import { createAssetAccessor, preloadSceneAssets } from "../assets/preload";
-import { shouldUseBeginFrame } from "../browser/chromium-loader";
 import { createLiveDomRenderSession } from "../browser/live-dom-session";
 import { PROGRESS_INTERVAL_MS } from "../constants";
 import { startFrameMuxer } from "../ffmpeg/frame-muxer";
@@ -125,18 +124,13 @@ export async function renderLyricVideo({
       parallelism,
       totalFrames: job.video.durationInFrames
     });
-    const useBeginFrame = shouldUseBeginFrame() && workerCount === 1;
 
     logger.info(`Using ${workerCount} Chromium render worker${workerCount === 1 ? "" : "s"}.`);
-    if (shouldUseBeginFrame() && !useBeginFrame) {
-      logger.info("Disabling BeginFrameControl because parallel rendering uses screenshot capture.");
-    }
 
     for (let workerIndex = 0; workerIndex < workerCount; workerIndex += 1) {
       workerHandles.push({
         current: await createLiveDomRenderSession({
           sessionLabel: `worker-${workerIndex}`,
-          preferBeginFrame: useBeginFrame,
           job,
           componentLookup,
           components: enabledComponents,
@@ -207,7 +201,6 @@ export async function renderLyricVideo({
           createWorkerSession: async () =>
             await createLiveDomRenderSession({
               sessionLabel: `worker-${workerIndex}`,
-              preferBeginFrame: useBeginFrame,
               job,
               componentLookup,
               components: enabledComponents,
