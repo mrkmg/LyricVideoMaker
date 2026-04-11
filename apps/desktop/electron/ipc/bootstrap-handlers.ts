@@ -10,6 +10,7 @@ import type { IpcDeps } from "./register-ipc-handlers";
 export function registerBootstrapHandlers({
   renderHistory,
   sceneCatalog,
+  layoutPreferencesStore,
   previewProfilerEnabled
 }: IpcDeps) {
   ipcMain.handle("app:get-bootstrap-data", () => ({
@@ -22,6 +23,9 @@ export function registerBootstrapHandlers({
     ),
     fonts: [...SUPPORTED_FONT_FAMILIES],
     history: renderHistory.list(),
+    layoutPreferences: {
+      panes: layoutPreferencesStore.get().panes
+    },
     previewProfilerEnabled
   }));
 }

@@ -1,5 +1,6 @@
 import type { BrowserWindow } from "electron";
 import type { PreviewWorkerClient } from "../services/preview/worker-client";
+import type { LayoutPreferencesStore } from "../services/layout-preferences";
 import type { RenderHistory } from "../services/render-history";
 import type { SceneCatalog } from "../services/scene-catalog";
 import type { SubtitleGenerationRunner } from "../services/subtitle-generator";
@@ -9,6 +10,7 @@ import { registerSceneHandlers } from "./scene-handlers";
 import { registerRenderHandlers } from "./render-handlers";
 import { registerSubtitleHandlers } from "./subtitle-handlers";
 import { registerPreviewHandlers } from "./preview-handlers";
+import { registerLayoutHandlers } from "./layout-handlers";
 
 export interface IpcDeps {
   getMainWindow(): BrowserWindow | null;
@@ -17,6 +19,7 @@ export interface IpcDeps {
   subtitleGenerationRunner: SubtitleGenerationRunner;
   renderHistory: RenderHistory;
   sceneCatalog: SceneCatalog;
+  layoutPreferencesStore: LayoutPreferencesStore;
   previewProfilerEnabled: boolean;
 }
 
@@ -27,4 +30,5 @@ export function registerIpcHandlers(deps: IpcDeps) {
   registerRenderHandlers(deps);
   registerSubtitleHandlers(deps);
   registerPreviewHandlers(deps);
+  registerLayoutHandlers(deps);
 }

@@ -1,14 +1,19 @@
 import { join } from "node:path";
 import { BrowserWindow } from "electron";
+import type { WindowLayoutPreferences } from "../services/layout-preferences";
 
 export interface CreateMainWindowOptions {
+  windowLayout?: WindowLayoutPreferences;
   onClosed(): void;
 }
 
-export function createMainWindow({ onClosed }: CreateMainWindowOptions): BrowserWindow {
+export function createMainWindow({ windowLayout, onClosed }: CreateMainWindowOptions): BrowserWindow {
   const mainWindow = new BrowserWindow({
-    width: 1440,
-    height: 960,
+    ...(windowLayout?.x !== undefined && windowLayout.y !== undefined
+      ? { x: windowLayout.x, y: windowLayout.y }
+      : {}),
+    width: windowLayout?.width ?? 1440,
+    height: windowLayout?.height ?? 960,
     minWidth: 1200,
     minHeight: 760,
     backgroundColor: "#0d1021",
@@ -29,6 +34,9 @@ export function createMainWindow({ onClosed }: CreateMainWindowOptions): Browser
   }
 
   mainWindow.once("ready-to-show", () => {
+    if (windowLayout?.maximized) {
+      mainWindow.maximize();
+    }
     mainWindow.show();
   });
 

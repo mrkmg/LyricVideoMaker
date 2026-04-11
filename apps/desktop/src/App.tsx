@@ -41,11 +41,15 @@ export function App() {
     generalPaneWidth,
     sidebarWidth,
     inspectorHeight,
+    isLayoutReady,
     activeResizeHandle,
     workspaceRef,
     mainPaneRef,
     startResize
-  } = useLayoutResize();
+  } = useLayoutResize({
+    bootstrapLoaded: bootstrap !== null,
+    initialPaneLayout: bootstrap?.layoutPreferences?.panes
+  });
 
   const scenes = bootstrap?.scenes ?? [];
   const components = bootstrap?.components ?? [];
@@ -75,9 +79,12 @@ export function App() {
     ? componentCatalog.get(selectedComponent.componentId) ?? null
     : null;
 
-  if (!bootstrap || !selectedScene) {
+  if (!bootstrap || !selectedScene || !isLayoutReady) {
     return <div className="app-shell loading">Loading composer...</div>;
   }
+
+  const loadedBootstrap = bootstrap;
+  const loadedSelectedScene = selectedScene;
 
   async function handlePickPath(kind: FilePickKind, instanceId?: string, optionId?: string) {
     const suggestedName =
@@ -131,7 +138,7 @@ export function App() {
         <SceneDetailsEditor
           builtInScenes={builtInScenes}
           userScenes={userScenes}
-          selectedScene={selectedScene}
+          selectedScene={loadedSelectedScene}
           components={components}
           componentCatalog={componentCatalog}
           onSceneChange={(sceneId) => composer.selectScene(scenes, sceneId)}
@@ -150,7 +157,7 @@ export function App() {
         <ComponentDetailsEditor
           component={selectedComponentDefinition}
           instance={selectedComponent}
-          fonts={bootstrap.fonts}
+          fonts={loadedBootstrap.fonts}
           onOptionChange={(optionId, value) =>
             composer.updateComponent(selectedComponent.id, (current) => ({
               ...current,

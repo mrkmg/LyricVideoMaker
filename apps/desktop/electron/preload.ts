@@ -12,6 +12,7 @@ const api: ElectronApi = {
   deleteScene: (sceneId) => ipcRenderer.invoke("scene:delete", sceneId),
   importScene: () => ipcRenderer.invoke("scene:import"),
   exportScene: (scene) => ipcRenderer.invoke("scene:export", scene),
+  savePaneLayout: (panes) => ipcRenderer.invoke("layout:save-pane-layout", panes),
   disposePreview: () => ipcRenderer.invoke("preview:dispose"),
   cancelRender: (jobId) => ipcRenderer.invoke("render:cancel", jobId),
   onRenderProgress: (callback) => {

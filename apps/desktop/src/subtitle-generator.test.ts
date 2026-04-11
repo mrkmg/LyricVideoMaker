@@ -92,19 +92,20 @@ describe("subtitle-generator", () => {
     );
 
     await flushMicrotasks();
-    expect(sidecarChild).toBeDefined();
-    if (!sidecarChild) {
+    const spawnedChild = sidecarChild as MockChildProcess | null;
+    expect(spawnedChild).toBeDefined();
+    if (!spawnedChild) {
       throw new Error("Expected subtitle sidecar process to be spawned.");
     }
-    sidecarChild.stdout.emit(
+    spawnedChild.stdout.emit(
       "data",
       'LVM_EVENT\t{"type":"progress","progress":45,"message":"Transcribing audio","stage":"transcribing"}\n'
     );
-    sidecarChild.stdout.emit(
+    spawnedChild.stdout.emit(
       "data",
       'LVM_EVENT\t{"type":"result","outputPath":"song.transcribed.srt"}\n'
     );
-    sidecarChild.emit("close", 0);
+    spawnedChild.emit("close", 0);
 
     await expect(runPromise).resolves.toEqual({ outputPath: "song.transcribed.srt" });
     expect(progressEvents).toEqual(

@@ -13,6 +13,15 @@ export interface AppBootstrapData {
   fonts: string[];
   history: RenderHistoryEntry[];
   previewProfilerEnabled: boolean;
+  layoutPreferences?: {
+    panes?: PaneLayoutPreferences;
+  };
+}
+
+export interface PaneLayoutPreferences {
+  generalPaneWidth: number;
+  sidebarWidth: number;
+  inspectorHeight: number;
 }
 
 export type FilePickKind = "audio" | "subtitle" | "lyrics-text" | "image" | "output";
@@ -78,6 +87,7 @@ export interface ElectronApi {
   deleteScene(sceneId: string): Promise<void>;
   importScene(): Promise<SerializedSceneDefinition | null>;
   exportScene(scene: SerializedSceneDefinition): Promise<string | null>;
+  savePaneLayout(panes: PaneLayoutPreferences): Promise<void>;
   disposePreview(): Promise<void>;
   cancelRender(jobId: string): Promise<void>;
   onRenderProgress(callback: (event: RenderProgressEvent) => void): () => void;

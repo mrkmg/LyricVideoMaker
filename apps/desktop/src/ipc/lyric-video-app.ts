@@ -17,6 +17,7 @@ export const lyricVideoApp: ElectronApi = {
   deleteScene: (sceneId) => window.lyricVideoApp.deleteScene(sceneId),
   importScene: () => window.lyricVideoApp.importScene(),
   exportScene: (scene) => window.lyricVideoApp.exportScene(scene),
+  savePaneLayout: (panes) => window.lyricVideoApp.savePaneLayout(panes),
   disposePreview: () => window.lyricVideoApp.disposePreview(),
   cancelRender: (jobId) => window.lyricVideoApp.cancelRender(jobId),
   onRenderProgress: (callback) => window.lyricVideoApp.onRenderProgress(callback),

@@ -96,6 +96,7 @@ describe("App", () => {
       deleteScene: vi.fn().mockResolvedValue(undefined),
       importScene: vi.fn().mockResolvedValue(null),
       exportScene: vi.fn().mockResolvedValue(null),
+      savePaneLayout: vi.fn().mockResolvedValue(undefined),
       disposePreview: vi.fn().mockResolvedValue(undefined),
       cancelRender: vi.fn().mockResolvedValue(undefined),
       onRenderProgress: vi.fn((callback) => {
@@ -120,6 +121,58 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: "Previous Cue" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Current Cue" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Next Cue" })).toBeTruthy();
+  });
+
+  it("applies saved pane sizes from bootstrap data", async () => {
+    vi.mocked(window.lyricVideoApp.getBootstrapData).mockResolvedValue(
+      createBootstrapData({
+        layoutPreferences: {
+          panes: {
+            generalPaneWidth: 420,
+            sidebarWidth: 340,
+            inspectorHeight: 360
+          }
+        }
+      })
+    );
+
+    const { container } = render(createElement(App));
+
+    await screen.findByRole("heading", { name: "Project Setup" });
+
+    expect((container.querySelector(".workspace-general-pane") as HTMLElement).style.width).toBe(
+      "420px"
+    );
+    expect((container.querySelector(".workspace-sidebar-pane") as HTMLElement).style.width).toBe(
+      "340px"
+    );
+    expect((container.querySelector(".workspace-inspector-pane") as HTMLElement).style.height).toBe(
+      "360px"
+    );
+  });
+
+  it("persists pane sizes after a splitter drag finishes", async () => {
+    render(createElement(App));
+
+    await screen.findByRole("heading", { name: "Project Setup" });
+
+    fireEvent.mouseDown(screen.getByLabelText("Resize general panel"), {
+      clientX: 0,
+      clientY: 0
+    });
+    fireEvent.mouseMove(window, {
+      clientX: 50,
+      clientY: 0
+    });
+    fireEvent.mouseUp(window);
+
+    await waitFor(() => {
+      expect(window.lyricVideoApp.savePaneLayout).toHaveBeenCalledWith({
+        generalPaneWidth: 280,
+        sidebarWidth: 300,
+        inspectorHeight: 300
+      });
+    });
   });
 
   it("switches the bottom inspector when selecting scene and component items", async () => {
@@ -217,7 +270,7 @@ describe("App", () => {
   });
 });
 
-function createBootstrapData(): AppBootstrapData {
+function createBootstrapData(overrides: Partial<AppBootstrapData> = {}): AppBootstrapData {
   return {
     scenes: [
       {
@@ -274,7 +327,8 @@ function createBootstrapData(): AppBootstrapData {
     ],
     fonts: ["DM Sans", "Arial"],
     history: [],
-    previewProfilerEnabled: false
+    previewProfilerEnabled: false,
+    ...overrides
   };
 }
 
