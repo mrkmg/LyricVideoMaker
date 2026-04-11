@@ -10,9 +10,9 @@ Build site: context/plans/build-site.md
 |------|--------|-------|
 | T-034 | DONE | Minimal stub with TODO image field so T-040 test passes. No collision with background-image. Commit 8be7b50. |
 | T-040 | DONE | Test verifies flattened options contain an image-type field that the existing preload loop iterates. No new asset-pipeline code added. Commit 8be7b50. |
-| T-035 | PENDING | Full options contract (Source, Fit, Appearance, Effects, Filters, Transform, Timing). Tier 3. |
-| T-036 | PENDING | Schema order. Tier 4. |
-| T-037 | PENDING | Default renders nothing until path chosen. Tier 4. |
-| T-038 | PENDING | Fit modes, filters, corner radius. Tier 4. |
-| T-039 | PENDING | Border, shadow, glow, tint. Tier 4. |
-| T-041 | PENDING | Per-frame opacity. Tier 4. |
+| T-035 | DONE | options.ts: ImageComponentOptions, DEFAULT_IMAGE_OPTIONS, imageOptionsSchema. Source field required. |
+| T-036 | DONE | Schema order Source/Transform/Fit/Appearance/Effects/Timing. |
+| T-037 | DONE | Default source="" (renders nothing). |
+| T-038 | DONE | Fit modes (contain/cover/fill/none), filter chain (grayscale/blur/brightness/contrast/saturation), border-radius + overflow:hidden. |
+| T-039 | DONE | Border via container border, drop-shadow + glow via filter chain, tint as multiply-blend overlay. |
+| T-041 | DONE | Per-frame opacity = option opacity / 100 * computeTimingOpacity; static markup. |

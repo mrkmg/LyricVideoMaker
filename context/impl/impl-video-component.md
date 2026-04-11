@@ -9,13 +9,13 @@ Build site: context/plans/build-site.md
 | Task | Status | Notes |
 |------|--------|-------|
 | T-049 | DONE | Minimal stub in packages/scene-registry/src/components/video/. Registered in builtInSceneComponents. Commit 8be7b50. |
-| T-050 | PENDING | Full options contract (Source, Playback, Fit, Appearance, Effects). Tier 5. |
-| T-051 | PENDING | Schema order. Tier 6. |
-| T-052 | PENDING | Defaults (muted true, no default path). Tier 6. |
-| T-053 | PENDING | Prepare phase probe (duration/dims/fps). Tier 5. |
-| T-054 | PENDING | Rendering video element with effects. Tier 6. |
-| T-055 | PENDING | sync-with-song + loop playback math. Tier 6. |
-| T-056 | PENDING | play-once-clamp + play-once-hide. Tier 6. |
-| T-057 | PENDING | Per-frame state for frame-sync handler. Tier 7. |
-| T-058 | PENDING | Muted audio enforcement. Tier 6. |
-| T-059 | PENDING | End-to-end verification. Tier 8. |
+| T-050 | DONE | options.ts: VideoComponentOptions with Source (video, muted), Playback (mode/offset/speed), Fit, Appearance, Effects. |
+| T-051 | DONE | Schema order Source/Playback/Transform/Fit/Appearance/Effects/Timing. |
+| T-052 | DONE | Default source="" muted=true. |
+| T-053 | DONE | probeVideoFile via ffprobe child_process. prepareVideoComponent surfaces probe failures as readable validation errors. Tests use injected probe stub. |
+| T-054 | DONE | buildVideoInitialState mounts muted+preload="auto"+playsinline video element with object-fit, filter chain, tint overlay, corner radius, border, shadow/glow. |
+| T-055 | DONE | computeVideoPlaybackState sync-with-song (linear+clamp) and loop (wrap modulo duration) modes. |
+| T-056 | DONE | play-once-clamp returns last-frame; play-once-hide returns hidden=true. |
+| T-057 | DONE | browserRuntime.getFrameState emits __videoSync payload + opacity. Frame-sync handler picks it up via __renderLiveDomFrame wrapper. |
+| T-058 | DONE | Muted attribute on rendered video element + default muted=true enforce song-only audio. |
+| T-059 | DONE | 30-second simulated render across 4 modes with boundary timestamp tests + Phase-B fallback documented in description. |
