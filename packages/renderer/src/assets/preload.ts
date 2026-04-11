@@ -25,8 +25,15 @@ export async function preloadSceneAssets(
       throw new Error(`Scene component definition "${instance.componentId}" is not registered.`);
     }
 
-    for (const field of definition.options) {
-      if (field.type !== "image") {
+    // Iterate every option entry — including fields nested inside category
+    // entries — and preload both image and video asset kinds. Non-asset
+    // field types are skipped. (T-011)
+    const flatFields = definition.options.flatMap((entry) =>
+      entry.type === "category" ? entry.options : [entry]
+    );
+
+    for (const field of flatFields) {
+      if (field.type !== "image" && field.type !== "video") {
         continue;
       }
 
@@ -35,7 +42,14 @@ export async function preloadSceneAssets(
         continue;
       }
 
-      const cachedBody = await loadCachedAssetBody(optionValue, video, signal, logger, assetCache);
+      const cachedBody = await loadCachedAssetBody(
+        optionValue,
+        video,
+        signal,
+        logger,
+        assetCache,
+        field.type
+      );
       const asset = {
         instanceId: instance.id,
         optionId: field.id,
@@ -47,7 +61,7 @@ export async function preloadSceneAssets(
 
       assets.set(getAssetKey(instance.id, field.id), asset);
       logger.info(
-        `Preloaded image asset "${instance.id}/${field.id}" from ${optionValue}${cachedBody.normalized ? " (normalized)" : ""}`
+        `Preloaded ${field.type} asset "${instance.id}/${field.id}" from ${optionValue}${cachedBody.normalized ? " (normalized)" : ""}`
       );
     }
   }

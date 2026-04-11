@@ -277,6 +277,18 @@ export function OptionField({
           </div>
         </div>
       );
+    case "video":
+      return (
+        <div className="option-row option-row-multiline">
+          <div className="option-label">
+            <FieldLabel label={field.label} />
+          </div>
+          <div className="option-input file-picker-input">
+            <div className="file-pill">{String(value ?? "") || "Not selected"}</div>
+            <button className="secondary" onClick={() => onPickFile("video")}>Pick video</button>
+          </div>
+        </div>
+      );
     case "select":
       return (
         <div className="option-row">
