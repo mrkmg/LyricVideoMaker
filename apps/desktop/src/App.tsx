@@ -164,7 +164,7 @@ export function App() {
               options: { ...current.options, [optionId]: value }
             }))
           }
-          onPickImage={(optionId) => void handlePickPath("image", selectedComponent.id, optionId)}
+          onPickFile={(optionId, kind) => void handlePickPath(kind, selectedComponent.id, optionId)}
         />
       );
     }

@@ -156,14 +156,20 @@ export function OptionField({
   value,
   fonts,
   onChange,
-  onPickImage
+  onPickFile
 }: {
   field: SceneOptionField;
   inputPrefix: string;
   value: unknown;
   fonts: string[];
   onChange: (value: unknown) => void;
-  onPickImage: () => void;
+  /**
+   * Generalized file-pick callback — one entry point that accepts both the
+   * field's kind ("image" or "video") and is invoked by the field dispatch
+   * switch below. Replaces the previous image-specific pick callback so
+   * image and video fields go through the same path (T-014).
+   */
+  onPickFile: (kind: "image" | "video") => void;
 }) {
   const inputId = `${inputPrefix}-${field.id}`;
 
@@ -267,7 +273,7 @@ export function OptionField({
           </div>
           <div className="option-input file-picker-input">
             <div className="file-pill">{String(value ?? "") || "Not selected"}</div>
-            <button className="secondary" onClick={onPickImage}>Pick image</button>
+            <button className="secondary" onClick={() => onPickFile("image")}>Pick image</button>
           </div>
         </div>
       );

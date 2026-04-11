@@ -80,7 +80,7 @@ function validateField(
   context: SceneValidationContext
 ): unknown {
   if (rawValue === undefined || rawValue === null || rawValue === "") {
-    if (field.type === "image" && field.required) {
+    if ((field.type === "image" || field.type === "video") && field.required) {
       throw new Error(`"${field.label}" is required.`);
     }
 
@@ -129,15 +129,9 @@ function validateField(
       }
       return fontValue;
     }
-    case "image": {
-      const imagePath = String(rawValue);
-      if (field.required && !imagePath.trim()) {
-        throw new Error(`"${field.label}" is required.`);
-      }
-      if (context.isFileAccessible && imagePath && !context.isFileAccessible(imagePath)) {
-        throw new Error(`"${field.label}" does not point to a readable file.`);
-      }
-      return imagePath;
+    case "image":
+    case "video": {
+      return validateFileField(field, rawValue, context);
     }
     case "select": {
       const stringValue = String(rawValue);
@@ -150,6 +144,27 @@ function validateField(
       return rawValue;
     }
   }
+}
+
+/**
+ * Shared file-accessibility validation used for both image and video fields.
+ * Enforces the required flag and verifies the referenced file is accessible
+ * via the validation context helper. Single implementation — image and video
+ * must use the same code path (T-008, cavekit-video-field-type R2).
+ */
+function validateFileField(
+  field: Extract<SceneOptionField, { type: "image" | "video" }>,
+  rawValue: unknown,
+  context: SceneValidationContext
+): string {
+  const path = String(rawValue);
+  if (field.required && !path.trim()) {
+    throw new Error(`"${field.label}" is required.`);
+  }
+  if (context.isFileAccessible && path && !context.isFileAccessible(path)) {
+    throw new Error(`"${field.label}" does not point to a readable file.`);
+  }
+  return path;
 }
 
 function getFieldDefault(field: SceneOptionField, fallback: unknown): unknown {

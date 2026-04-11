@@ -11,13 +11,14 @@ export function ComponentDetailsEditor({
   instance,
   fonts,
   onOptionChange,
-  onPickImage
+  onPickFile
 }: {
   component: SerializedSceneComponentDefinition;
   instance: SceneComponentInstance;
   fonts: string[];
   onOptionChange: (optionId: string, value: unknown) => void;
-  onPickImage: (optionId: string) => void;
+  /** Generalized file-pick callback: identifier + kind (T-014). */
+  onPickFile: (optionId: string, kind: "image" | "video") => void;
 }) {
   const topLevelOptions = component.options.filter((option) => !isSceneOptionCategory(option));
   const categorizedOptions = component.options.filter(isSceneOptionCategory);
@@ -44,7 +45,7 @@ export function ComponentDetailsEditor({
                   value={instance.options[field.id]}
                   fonts={fonts}
                   onChange={(value) => onOptionChange(field.id, value)}
-                  onPickImage={() => onPickImage(field.id)}
+                  onPickFile={(kind) => onPickFile(field.id, kind)}
                 />
               ))}
             </div>
@@ -62,7 +63,7 @@ export function ComponentDetailsEditor({
                   value={instance.options[field.id]}
                   fonts={fonts}
                   onChange={(value) => onOptionChange(field.id, value)}
-                  onPickImage={() => onPickImage(field.id)}
+                  onPickFile={(kind) => onPickFile(field.id, kind)}
                 />
               ))}
             </OptionCategorySection>

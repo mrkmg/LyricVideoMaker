@@ -4,16 +4,25 @@ import { runBinaryCommand } from "../ffmpeg/run-command";
 import type { CachedAssetBody, PreviewAssetCache, RenderLogger } from "../types";
 import { getMimeType } from "./mime";
 
+/**
+ * Asset kinds the cache understands. The cache-key format is stable across
+ * kinds so the same path-plus-dimensions key is reused whether the asset is
+ * an image (which goes through ffmpeg normalization) or a video (which is
+ * read from disk as-is and served with its detected MIME type).
+ */
+export type CachedAssetKind = "image" | "video";
+
 export async function loadCachedAssetBody(
   path: string,
   video: RenderJob["video"],
   signal: AbortSignal | undefined,
   logger: RenderLogger,
-  assetCache?: PreviewAssetCache
+  assetCache?: PreviewAssetCache,
+  kind: CachedAssetKind = "image"
 ): Promise<CachedAssetBody> {
   const cacheKey = `${path}::${video.width}x${video.height}`;
   if (!assetCache) {
-    return await createCachedAssetBody(path, video, signal, logger);
+    return await createCachedAssetBody(path, video, signal, logger, kind);
   }
 
   const cached = assetCache.get(cacheKey);
@@ -21,7 +30,7 @@ export async function loadCachedAssetBody(
     return await cached;
   }
 
-  const pending = createCachedAssetBody(path, video, signal, logger).catch((error) => {
+  const pending = createCachedAssetBody(path, video, signal, logger, kind).catch((error) => {
     assetCache.delete(cacheKey);
     throw error;
   });
@@ -33,8 +42,20 @@ export async function createCachedAssetBody(
   path: string,
   video: RenderJob["video"],
   signal: AbortSignal | undefined,
-  logger: RenderLogger
+  logger: RenderLogger,
+  kind: CachedAssetKind = "image"
 ): Promise<CachedAssetBody> {
+  if (kind === "video") {
+    // Video bodies are served straight from disk without normalization. The
+    // content-type is taken from MIME detection so the headless browser can
+    // play the response via a <video> element.
+    return {
+      body: await readFile(path),
+      contentType: getMimeType(path),
+      normalized: false
+    };
+  }
+
   const normalizedBody = await normalizeImageAsset(path, video, signal, logger);
   if (normalizedBody) {
     return {
