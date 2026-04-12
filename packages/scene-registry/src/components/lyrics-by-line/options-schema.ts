@@ -135,11 +135,11 @@ export const lyricsByLineOptionsSchema: SceneOptionEntry[] = [
 ];
 
 export const lyricsByLineDefaultOptions: LyricsByLineOptions = {
-  x: 50,
-  y: 50,
+  x: 0,
+  y: 0,
   width: 100,
   height: 100,
-  anchor: "middle-center",
+  anchor: "top-left",
   rotation: 0,
   flipHorizontal: false,
   flipVertical: false,

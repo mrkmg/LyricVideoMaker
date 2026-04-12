@@ -10,32 +10,15 @@ export const equalizerOptionsSchema: SceneOptionEntry[] = [
     options: [
       {
         type: "select",
-        id: "placement",
-        label: "Orientation",
-        defaultValue: "bottom-center",
+        id: "barOrientation",
+        label: "Bar Orientation",
+        defaultValue: "horizontal",
         options: [
-          { label: "Bottom Center", value: "bottom-center" },
-          { label: "Top Center", value: "top-center" },
-          { label: "Left Center", value: "left-center" },
-          { label: "Right Center", value: "right-center" },
-          { label: "Bottom Full", value: "bottom-full" },
-          { label: "Top Full", value: "top-full" },
-          { label: "Center Horizontal", value: "center-horizontal" },
-          { label: "Center Vertical", value: "center-vertical" }
+          { label: "Horizontal", value: "horizontal" },
+          { label: "Vertical", value: "vertical" }
         ]
       },
-      { type: "number", id: "innerPadding", label: "Inner Padding", defaultValue: 24, min: 0, max: 160, step: 1 },
-      {
-        type: "select",
-        id: "alignment",
-        label: "Alignment",
-        defaultValue: "center",
-        options: [
-          { label: "Start", value: "start" },
-          { label: "Center", value: "center" },
-          { label: "End", value: "end" }
-        ]
-      }
+      { type: "number", id: "innerPadding", label: "Inner Padding", defaultValue: 24, min: 0, max: 160, step: 1 }
     ]
   },
   transformCategory,
@@ -62,6 +45,20 @@ export const equalizerOptionsSchema: SceneOptionEntry[] = [
         options: [
           { label: "Stroke", value: "stroke" },
           { label: "Area", value: "area" }
+        ]
+      },
+      {
+        type: "select",
+        id: "lineBaseline",
+        label: "Line Baseline",
+        defaultValue: "bottom",
+        options: [
+          { label: "Top", value: "top" },
+          { label: "Bottom", value: "bottom" },
+          { label: "Left", value: "left" },
+          { label: "Right", value: "right" },
+          { label: "Center Horizontal", value: "center-horizontal" },
+          { label: "Center Vertical", value: "center-vertical" }
         ]
       }
     ]
@@ -181,17 +178,17 @@ export const equalizerOptionsSchema: SceneOptionEntry[] = [
 ];
 
 export const equalizerDefaultOptions: EqualizerOptions = {
-  x: 50,
-  y: 98,
-  width: 56,
-  height: 14,
-  anchor: "bottom-center",
+  x: 0,
+  y: 0,
+  width: 100,
+  height: 100,
+  anchor: "top-left",
   rotation: 0,
   flipHorizontal: false,
   flipVertical: false,
-  placement: "bottom-center",
+  barOrientation: "horizontal",
   innerPadding: 24,
-  alignment: "center",
+  lineBaseline: "bottom",
   graphMode: "bars",
   lineStyle: "stroke",
   barCount: 28,

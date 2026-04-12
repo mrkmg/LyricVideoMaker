@@ -99,11 +99,11 @@ export function getLyricContainerPixelWidth(
 
 function getLyricTransformOptions(options: LyricsByLineOptions): TransformOptions {
   return {
-    x: options.x ?? 50,
-    y: options.y ?? 50,
+    x: options.x ?? 0,
+    y: options.y ?? 0,
     width: options.width ?? 100,
     height: options.height ?? 100,
-    anchor: options.anchor ?? "middle-center",
+    anchor: options.anchor ?? "top-left",
     rotation: options.rotation ?? 0,
     flipHorizontal: options.flipHorizontal ?? false,
     flipVertical: options.flipVertical ?? false

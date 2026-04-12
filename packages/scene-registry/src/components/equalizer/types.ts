@@ -1,16 +1,7 @@
 import type React from "react";
 import type { TransformOptions } from "../../shared";
 
-export type EqualizerPlacement =
-  | "bottom-center"
-  | "top-center"
-  | "left-center"
-  | "right-center"
-  | "bottom-full"
-  | "top-full"
-  | "center-horizontal"
-  | "center-vertical";
-export type EqualizerAlignment = "start" | "center" | "end";
+export type EqualizerBarOrientation = "horizontal" | "vertical";
 export type EqualizerLayoutMode = "single" | "mirrored" | "split";
 export type EqualizerGrowthDirection = "up" | "down" | "left" | "right" | "outward";
 export type EqualizerBandDistribution = "linear" | "log";
@@ -27,9 +18,9 @@ export type EqualizerLineBaseline =
   | "center-vertical";
 
 export interface EqualizerOptions extends TransformOptions {
-  placement: EqualizerPlacement;
+  barOrientation: EqualizerBarOrientation;
   innerPadding: number;
-  alignment: EqualizerAlignment;
+  lineBaseline: EqualizerLineBaseline;
   graphMode: EqualizerGraphMode;
   lineStyle: EqualizerLineStyle;
   barCount: number;

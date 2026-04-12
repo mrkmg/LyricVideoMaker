@@ -61,11 +61,11 @@ export interface TransformOptions {
  * defaults rather than duplicating the literals.
  */
 export const DEFAULT_TRANSFORM_OPTIONS: TransformOptions = {
-  x: 50,
-  y: 50,
-  width: 50,
-  height: 50,
-  anchor: "middle-center",
+  x: 0,
+  y: 0,
+  width: 100,
+  height: 100,
+  anchor: "top-left",
   rotation: 0,
   flipHorizontal: false,
   flipVertical: false
@@ -83,13 +83,13 @@ export const transformCategory: SceneOptionCategory = {
   label: "Transform",
   defaultExpanded: true,
   options: [
-    { type: "number", id: "x", label: "X", defaultValue: 50, min: -200, max: 300, step: 1 },
-    { type: "number", id: "y", label: "Y", defaultValue: 50, min: -200, max: 300, step: 1 },
+    { type: "number", id: "x", label: "X", defaultValue: 0, min: -200, max: 300, step: 1 },
+    { type: "number", id: "y", label: "Y", defaultValue: 0, min: -200, max: 300, step: 1 },
     {
       type: "number",
       id: "width",
       label: "Width",
-      defaultValue: 50,
+      defaultValue: 100,
       min: 0,
       max: 500,
       step: 1
@@ -98,7 +98,7 @@ export const transformCategory: SceneOptionCategory = {
       type: "number",
       id: "height",
       label: "Height",
-      defaultValue: 50,
+      defaultValue: 100,
       min: 0,
       max: 500,
       step: 1
@@ -107,7 +107,7 @@ export const transformCategory: SceneOptionCategory = {
       type: "select",
       id: "anchor",
       label: "Anchor",
-      defaultValue: "middle-center",
+      defaultValue: "top-left",
       options: [
         { label: "Top Left", value: "top-left" },
         { label: "Top Center", value: "top-center" },

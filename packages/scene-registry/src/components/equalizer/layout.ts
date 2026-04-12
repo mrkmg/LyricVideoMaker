@@ -4,29 +4,22 @@ import { computeTransformStyle } from "../../shared/transform-runtime";
 import type { TransformOptions } from "../../shared";
 import type {
   EqualizerLayout,
-  EqualizerLineBaseline,
-  EqualizerOptions,
-  EqualizerPlacement
+  EqualizerOptions
 } from "./types";
 
 export function getEqualizerLayout(
   options: EqualizerOptions,
   video: { width: number; height: number }
 ): EqualizerLayout {
-  const isHorizontal = ![
-    "left-center",
-    "right-center",
-    "center-vertical"
-  ].includes(options.placement);
+  const isHorizontal = options.barOrientation === "horizontal";
   const transformStyle = computeTransformStyle(getEqualizerTransformOptions(options), video);
 
   return {
     isHorizontal,
-    lineBaseline: getLineBaseline(options.placement),
+    lineBaseline: options.lineBaseline,
     wrapperStyle: {
       ...transformStyle,
       padding: `${Math.max(0, options.innerPadding / 2)}px`,
-      justifySelf: options.alignment,
       pointerEvents: "none"
     } satisfies React.CSSProperties,
     plateStyle: {
@@ -51,33 +44,13 @@ export function getEqualizerLayout(
 
 function getEqualizerTransformOptions(options: EqualizerOptions): TransformOptions {
   return {
-    x: options.x ?? 50,
-    y: options.y ?? 98,
-    width: options.width ?? 56,
-    height: options.height ?? 14,
-    anchor: options.anchor ?? "bottom-center",
+    x: options.x ?? 0,
+    y: options.y ?? 0,
+    width: options.width ?? 100,
+    height: options.height ?? 100,
+    anchor: options.anchor ?? "top-left",
     rotation: options.rotation ?? 0,
     flipHorizontal: options.flipHorizontal ?? false,
     flipVertical: options.flipVertical ?? false
   };
-}
-
-export function getLineBaseline(placement: EqualizerPlacement): EqualizerLineBaseline {
-  switch (placement) {
-    case "top-center":
-    case "top-full":
-      return "top";
-    case "left-center":
-      return "left";
-    case "right-center":
-      return "right";
-    case "center-horizontal":
-      return "center-horizontal";
-    case "center-vertical":
-      return "center-vertical";
-    case "bottom-center":
-    case "bottom-full":
-    default:
-      return "bottom";
-  }
 }
