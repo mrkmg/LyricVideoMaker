@@ -38,8 +38,32 @@ export function canRenderWithLiveDom(
 ) {
   return components.every((instance) => {
     const definition = componentLookup.get(instance.componentId);
-    return Boolean(definition?.browserRuntime?.runtimeId);
+    return Boolean(definition?.browserRuntime?.runtimeId && definition.browserRuntime.browserScript);
   });
+}
+
+export async function injectComponentRuntimes(
+  page: PageClient,
+  components: ValidatedSceneComponentInstance[],
+  componentLookup: Map<string, SceneComponentDefinition<Record<string, unknown>>>
+): Promise<void> {
+  const injected = new Set<string>();
+  for (const instance of components) {
+    const definition = componentLookup.get(instance.componentId);
+    const runtime = definition?.browserRuntime;
+    if (!runtime || injected.has(runtime.runtimeId)) continue;
+    injected.add(runtime.runtimeId);
+
+    if (!runtime.browserScript) {
+      throw new Error(
+        `Component "${instance.componentId}" has runtimeId "${runtime.runtimeId}" but no browserScript.`
+      );
+    }
+
+    await page.evaluate((script: string) => {
+      new Function(script)();
+    }, runtime.browserScript);
+  }
 }
 
 export function createLiveDomScenePayload({
@@ -479,492 +503,29 @@ export function renderPageShell(fontCss = ""): string {
           });
         }
 
-        function createEqualizerBarDescriptor(handle, entry, initialState, track) {
-          if (entry.type === "gap") {
-            const gap = document.createElement("div");
-            gap.style.flex = "0 0 " + String(initialState.gapSize) + "px";
-            track.appendChild(gap);
-            return null;
-          }
-
-          const bar = document.createElement("div");
-          bar.dataset.equalizerBar = "";
-          bar.style.position = "relative";
-          bar.style.flex = "1";
-          if (initialState.isHorizontal) {
-            bar.style.height = "100%";
-          } else {
-            bar.style.width = "100%";
-          }
-
-          const descriptor = {
-            type: initialState.layoutMode,
-            isHorizontal: initialState.isHorizontal,
-            growthDirection: initialState.growthDirection,
-            fills: []
-          };
-
-          if (initialState.layoutMode === "mirrored") {
-            if (initialState.isHorizontal) {
-              const upper = document.createElement("div");
-              applyStyles(upper, {
-                position: "absolute",
-                left: "0",
-                right: "0",
-                top: "0",
-                bottom: "50%",
-                background: entry.color,
-                borderRadius: initialState.borderRadius,
-                opacity: initialState.opacity,
-                boxShadow: initialState.boxShadow,
-                transformOrigin: "center bottom",
-                willChange: "transform",
-                contain: "layout paint style"
-              });
-              const lower = upper.cloneNode(false);
-              lower.style.top = "50%";
-              lower.style.bottom = "0";
-              lower.style.transformOrigin = "center top";
-              bar.appendChild(upper);
-              bar.appendChild(lower);
-              descriptor.fills.push(upper, lower);
-            } else {
-              const left = document.createElement("div");
-              applyStyles(left, {
-                position: "absolute",
-                top: "0",
-                bottom: "0",
-                left: "0",
-                right: "50%",
-                background: entry.color,
-                borderRadius: initialState.borderRadius,
-                opacity: initialState.opacity,
-                boxShadow: initialState.boxShadow,
-                transformOrigin: "right center",
-                willChange: "transform",
-                contain: "layout paint style"
-              });
-              const right = left.cloneNode(false);
-              right.style.left = "50%";
-              right.style.right = "0";
-              right.style.transformOrigin = "left center";
-              bar.appendChild(left);
-              bar.appendChild(right);
-              descriptor.fills.push(left, right);
-            }
-          } else {
-            const fill = document.createElement("div");
-            applyStyles(fill, {
-              position: "absolute",
-              top: "0",
-              right: "0",
-              bottom: "0",
-              left: "0",
-              background: entry.color,
-              borderRadius: initialState.borderRadius,
-              opacity: initialState.opacity,
-              boxShadow: initialState.boxShadow,
-              willChange: "transform",
-              contain: "layout paint style"
-            });
-
-            if (initialState.isHorizontal) {
-              fill.style.transformOrigin =
-                initialState.growthDirection === "down"
-                  ? "center top"
-                  : initialState.growthDirection === "outward"
-                    ? "center center"
-                    : "center bottom";
-            } else {
-              fill.style.transformOrigin =
-                initialState.growthDirection === "left"
-                  ? "right center"
-                  : initialState.growthDirection === "outward"
-                    ? "center center"
-                    : "left center";
-            }
-
-            bar.appendChild(fill);
-            descriptor.fills.push(fill);
-          }
-
-          track.appendChild(bar);
-          handle.barDescriptors.push(descriptor);
-          return descriptor;
-        }
-
-        function setEqualizerDescriptorColor(descriptor, color) {
-          if (typeof color !== "string") {
-            return;
-          }
-
-          for (const fill of descriptor.fills) {
-            fill.style.background = color;
-          }
-        }
-
-        function applyEqualizerValue(descriptor, value, color) {
-          const amplitude = Math.max(0, Math.min(1, Number(value) || 0));
-          const transform = descriptor.isHorizontal
-            ? "scaleY(" + String(amplitude) + ")"
-            : "scaleX(" + String(amplitude) + ")";
-
-          setEqualizerDescriptorColor(descriptor, color);
-
-          for (const fill of descriptor.fills) {
-            fill.style.transform = transform;
-          }
-        }
-
-        function createEqualizerLineDescriptor(initialState, track) {
-          const svgNS = "http://www.w3.org/2000/svg";
-          const svg = document.createElementNS(svgNS, "svg");
-          svg.dataset.equalizerLine = "";
-          svg.setAttribute("viewBox", "0 0 100 100");
-          svg.setAttribute("preserveAspectRatio", "none");
-          applyStyles(svg, initialState.svgStyle || {
-            width: "100%",
-            height: "100%",
-            overflow: "visible"
-          });
-
-          const defs = document.createElementNS(svgNS, "defs");
-          const gradient = document.createElementNS(svgNS, "linearGradient");
-          gradient.setAttribute("id", String(initialState.gradientId || "equalizer-gradient"));
-          gradient.setAttribute("gradientUnits", "userSpaceOnUse");
-          gradient.setAttribute("x1", String(initialState.gradientAxis?.x1 ?? 0));
-          gradient.setAttribute("y1", String(initialState.gradientAxis?.y1 ?? 0));
-          gradient.setAttribute("x2", String(initialState.gradientAxis?.x2 ?? 100));
-          gradient.setAttribute("y2", String(initialState.gradientAxis?.y2 ?? 0));
-          defs.appendChild(gradient);
-          svg.appendChild(defs);
-
-          const areaPath = initialState.lineStyle === "area"
-            ? document.createElementNS(svgNS, "path")
-            : null;
-          if (areaPath) {
-            areaPath.setAttribute("fill", "url(#" + String(initialState.gradientId) + ")");
-            areaPath.style.opacity = String(initialState.areaFillOpacity ?? 0.35);
-            areaPath.style.filter = String(initialState.filter || "none");
-            svg.appendChild(areaPath);
-          }
-
-          const linePath = document.createElementNS(svgNS, "path");
-          linePath.setAttribute("fill", "none");
-          linePath.setAttribute("stroke", "url(#" + String(initialState.gradientId) + ")");
-          linePath.setAttribute("stroke-width", String(initialState.strokeWidth ?? 3));
-          linePath.setAttribute("stroke-linecap", String(initialState.strokeLinecap || "round"));
-          linePath.setAttribute("stroke-linejoin", String(initialState.strokeLinecap || "round"));
-          linePath.style.opacity = String(initialState.opacity ?? 1);
-          linePath.style.filter = String(initialState.filter || "none");
-          svg.appendChild(linePath);
-
-          track.appendChild(svg);
-
-          return {
-            svg,
-            gradient,
-            linePath,
-            areaPath,
-            baseline: initialState.baseline || "bottom"
-          };
-        }
-
-        function buildEqualizerLineGeometry(values, baseline) {
-          const safeValues = Array.isArray(values) && values.length > 0 ? values : [0];
-          const points = safeValues.map((rawValue, index) => {
-            const amplitude = Math.max(0, Math.min(1, Number(rawValue) || 0));
-            const progress = safeValues.length <= 1 ? 0.5 : index / (safeValues.length - 1);
-
-            switch (baseline) {
-              case "top":
-                return { x: progress * 100, y: amplitude * 100 };
-              case "left":
-                return { x: amplitude * 100, y: progress * 100 };
-              case "right":
-                return { x: 100 - amplitude * 100, y: progress * 100 };
-              case "center-horizontal":
-                return { x: progress * 100, y: 50 - amplitude * 50 };
-              case "center-vertical":
-                return { x: 50 + amplitude * 50, y: progress * 100 };
-              case "bottom":
-              default:
-                return { x: progress * 100, y: 100 - amplitude * 100 };
-            }
-          });
-
-          const linePath = points
-            .map((point, index) =>
-              (index === 0 ? "M " : "L ") + point.x.toFixed(3) + " " + point.y.toFixed(3)
-            )
-            .join(" ");
-
-          const firstPoint = points[0];
-          const lastPoint = points[points.length - 1];
-          let areaPath = linePath;
-
-          switch (baseline) {
-            case "top":
-              areaPath += " L " + lastPoint.x.toFixed(3) + " 0 L " + firstPoint.x.toFixed(3) + " 0 Z";
-              break;
-            case "left":
-              areaPath += " L 0 " + lastPoint.y.toFixed(3) + " L 0 " + firstPoint.y.toFixed(3) + " Z";
-              break;
-            case "right":
-              areaPath += " L 100 " + lastPoint.y.toFixed(3) + " L 100 " + firstPoint.y.toFixed(3) + " Z";
-              break;
-            case "center-horizontal":
-              areaPath += " L " + lastPoint.x.toFixed(3) + " 50 L " + firstPoint.x.toFixed(3) + " 50 Z";
-              break;
-            case "center-vertical":
-              areaPath += " L 50 " + lastPoint.y.toFixed(3) + " L 50 " + firstPoint.y.toFixed(3) + " Z";
-              break;
-            case "bottom":
-            default:
-              areaPath += " L " + lastPoint.x.toFixed(3) + " 100 L " + firstPoint.x.toFixed(3) + " 100 Z";
-              break;
-          }
-
-          return { linePath, areaPath };
-        }
-
-        function updateEqualizerLineGradient(gradient, colors) {
-          gradient.textContent = "";
-          const safeColors = Array.isArray(colors) && colors.length > 0 ? colors : ["#ffffff"];
-
-          for (let index = 0; index < safeColors.length; index += 1) {
-            const stop = document.createElementNS("http://www.w3.org/2000/svg", "stop");
-            const offset = safeColors.length <= 1 ? 0 : (index / (safeColors.length - 1)) * 100;
-            stop.setAttribute("offset", String(offset) + "%");
-            stop.setAttribute("stop-color", String(safeColors[index]));
-            gradient.appendChild(stop);
-          }
-        }
-
-        function applyEqualizerLineState(handle, state) {
-          const geometry = buildEqualizerLineGeometry(state.values, state.baseline || handle.baseline || "bottom");
-          updateEqualizerLineGradient(handle.gradient, state.colors);
-          handle.linePath.setAttribute("d", geometry.linePath);
-          if (handle.areaPath) {
-            handle.areaPath.setAttribute("d", geometry.areaPath);
-          }
-        }
-
         // ────────────────────────────────────────────────────────────────
         // Live-DOM runtime registry.
         //
-        // Each browser runtime exposes mount(layer, initialState) which
-        // returns a handle, and update(handle, state) which applies a new
-        // per-frame state to the mounted DOM. Runtimes are keyed by
-        // runtimeId and looked up in the registry below.
+        // Runtimes are registered dynamically by component browserScript
+        // strings via window.__registerLiveDomRuntime(). The registry
+        // starts empty — scripts are injected before scene mounting.
+        //
+        // Each runtime exposes mount(layer, initialState) → handle and
+        // update(handle, state) for per-frame DOM updates.
         //
         // Per-frame readiness contract:
-        //   Components that need asynchronous DOM work to settle before
-        //   capture participate implicitly via internal frame state.
-        //   Video frame sequences return:
-        //
-        //     state.__imageFrameSync = { src: string, label?: string }
-        //
-        //   The wrapper updates owned <img data-video-frame> elements and
-        //   registers a readiness task until load/decode settles.
-        //
-        //   The contract is deliberately component-agnostic: any async
-        //   task can register itself on __frameReadiness, and future
-        //   features beyond video seeks will reuse the same gate.
-        //
-        //   The public scene-component and render-prop interfaces remain
-        //   unchanged — runtimes participate purely by returning state in
-        //   the appropriate shape from getFrameState.
+        //   Components returning state.__imageFrameSync from getFrameState
+        //   trigger the image sync gate automatically. Any async task can
+        //   register on window.__frameReadiness.
         // ────────────────────────────────────────────────────────────────
-        const runtimeRegistry = {
-          "background-image": {
-            mount(layer, initialState) {
-              if (!initialState || !initialState.imageUrl) {
-                return null;
-              }
+        const runtimeRegistry = {};
 
-              const image = document.createElement("img");
-              image.src = initialState.imageUrl;
-              image.alt = "";
-              applyStyles(image, {
-                position: "absolute",
-                inset: "0",
-                width: "100%",
-                height: "100%",
-                objectFit: "cover",
-                transform: "scale(1.03)",
-                contain: "paint"
-              });
-              layer.appendChild(image);
-              return { image };
-            },
-            update() {}
-          },
-          "background-color": {
-            mount(layer, initialState) {
-              const gradient = document.createElement("div");
-              applyStyles(gradient, {
-                position: "absolute",
-                inset: "0",
-                background: initialState && initialState.background ? initialState.background : "transparent",
-                contain: "paint"
-              });
-              layer.appendChild(gradient);
-              return { gradient };
-            },
-            update() {}
-          },
-          // Generic runtime used by Shape, Static Text, Image, and Video
-          // components: injects a prebuilt HTML fragment into an absolutely
-          // positioned container, then per-frame updates only opacity (and
-          // any auxiliary state the component returns). This avoids
-          // duplicating shape/text/image rendering logic inside the page
-          // shell — the Node side assembles markup via a builder, and the
-          // browser runtime just mounts and toggles visibility.
-          "static-fx-layer": {
-            mount(layer, initialState) {
-              const container = document.createElement("div");
-              if (initialState && initialState.containerStyle) {
-                applyStyles(container, initialState.containerStyle);
-              }
-              if (initialState && typeof initialState.html === "string") {
-                container.innerHTML = initialState.html;
-              }
-              if (initialState && typeof initialState.initialOpacity === "number") {
-                container.style.opacity = String(initialState.initialOpacity);
-              }
-              layer.appendChild(container);
-              return { container };
-            },
-            update(handle, state) {
-              if (!handle || !handle.container || !state) {
-                return;
-              }
-              if (typeof state.opacity === "number") {
-                handle.container.style.opacity = String(state.opacity);
-              }
-            }
-          },
-          "lyrics-by-line": {
-              mount(layer, initialState) {
-                const wrapper = document.createElement("div");
-                if (initialState && initialState.containerStyle) {
-                  applyStyles(wrapper, initialState.containerStyle);
-                }
-                applyStyles(wrapper, {
-                  display: "flex",
-                  justifyContent: "center",
-                  boxSizing: "border-box",
-                  contain: "layout style",
-                  alignItems: initialState.alignItems,
-                  padding: initialState.padding,
-                  color: initialState.color,
-                  fontFamily: initialState.fontFamily
-                });
+        window.__registerLiveDomRuntime = function(runtimeId, runtime) {
+          runtimeRegistry[runtimeId] = runtime;
+        };
 
-                const text = document.createElement("div");
-                applyStyles(text, {
-                  display: "inline-block",
-                  maxWidth: "100%",
-                  textAlign: "center",
-                  fontWeight: "700",
-                  lineHeight: "1.15",
-                  letterSpacing: "-0.03em",
-                  whiteSpace: initialState.whiteSpace,
-                  willChange: "opacity",
-                  contain: "layout style",
-                  opacity: "0"
-                });
-
-              wrapper.appendChild(text);
-              layer.appendChild(wrapper);
-              return { wrapper, text };
-            },
-            update(handle, state) {
-              if (!handle) {
-                return;
-              }
-
-              if (typeof state.text === "string" && handle.text.textContent !== state.text) {
-                handle.text.textContent = state.text;
-              }
-
-                if (state.fontSize !== undefined) {
-                  handle.text.style.fontSize = String(state.fontSize) + "px";
-                }
-
-                handle.text.style.padding = state.padding ? String(state.padding) : "0px";
-                handle.text.style.textShadow = state.textShadow ? String(state.textShadow) : "none";
-                handle.text.style.webkitTextStroke = state.webkitTextStroke ? String(state.webkitTextStroke) : "";
-                handle.text.style.opacity = String(state.opacity ?? 0);
-              }
-          },
-          "equalizer": {
-            mount(layer, initialState) {
-              const wrapper = document.createElement("div");
-              applyStyles(wrapper, initialState.wrapperStyle);
-              wrapper.style.pointerEvents = "none";
-              layer.appendChild(wrapper);
-
-              if (initialState.plateStyle) {
-                const plate = document.createElement("div");
-                plate.dataset.equalizerPlate = "";
-                applyStyles(plate, initialState.plateStyle);
-                wrapper.appendChild(plate);
-              }
-
-              const track = document.createElement("div");
-              track.dataset.equalizerTrack = "";
-              applyStyles(track, initialState.trackStyle);
-              wrapper.appendChild(track);
-
-              const handle = {
-                wrapper,
-                track,
-                graphMode: initialState.graphMode || "bars",
-                barDescriptors: [],
-                lineDescriptor: null
-              };
-
-              if (initialState.graphMode === "line") {
-                handle.lineDescriptor = createEqualizerLineDescriptor(initialState, track);
-                applyEqualizerLineState(handle.lineDescriptor, {
-                  values: initialState.values,
-                  colors: initialState.colors,
-                  baseline: initialState.baseline
-                });
-              } else {
-                for (const entry of initialState.entries) {
-                  const descriptor = createEqualizerBarDescriptor(handle, entry, initialState, track);
-                  if (descriptor && entry.type === "bar") {
-                    applyEqualizerValue(descriptor, entry.value, entry.color);
-                  }
-                }
-              }
-
-              return handle;
-            },
-            update(handle, state) {
-              if (!handle || !state || !Array.isArray(state.values)) {
-                return;
-              }
-
-              if (handle.graphMode === "line") {
-                if (handle.lineDescriptor) {
-                  applyEqualizerLineState(handle.lineDescriptor, state);
-                }
-                return;
-              }
-
-              for (let index = 0; index < handle.barDescriptors.length; index += 1) {
-                applyEqualizerValue(
-                  handle.barDescriptors[index],
-                  state.values[index] ?? 0,
-                  state.colors?.[index]
-                );
-              }
-            }
-          }
+        window.__liveDomUtils = {
+          applyStyles: applyStyles
         };
 
         window.__mountLiveDomScene = async function mountLiveDomScene(payload) {

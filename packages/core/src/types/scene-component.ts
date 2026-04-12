@@ -80,6 +80,7 @@ export interface SceneBrowserFrameStateContext<TOptions> {
 
 export interface SceneBrowserRuntimeDefinition<TOptions> {
   runtimeId: string;
+  browserScript?: string;
   getInitialState?: (
     ctx: SceneBrowserInitialStateContext<TOptions>
   ) => Record<string, unknown> | null;

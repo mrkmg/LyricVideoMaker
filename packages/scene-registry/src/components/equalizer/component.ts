@@ -1,4 +1,5 @@
 import type { SceneComponentDefinition } from "@lyric-video-maker/core";
+import { equalizerBrowserScript } from "./browser-runtime";
 import {
   getEqualizerFrameBrowserState,
   getEqualizerInitialBrowserState
@@ -21,6 +22,7 @@ export const equalizerComponent: SceneComponentDefinition<EqualizerOptions> = {
   prepare: prepareEqualizer,
   browserRuntime: {
     runtimeId: "equalizer",
+    browserScript: equalizerBrowserScript,
     getInitialState: getEqualizerInitialBrowserState,
     getFrameState: getEqualizerFrameBrowserState
   },

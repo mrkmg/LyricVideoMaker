@@ -43,7 +43,8 @@ export function getEqualizerLayout(
       width: "100%",
       height: "100%",
       alignItems: "stretch",
-      justifyContent: "stretch"
+      justifyContent: "stretch",
+      overflow: "hidden"
     } satisfies React.CSSProperties
   };
 }

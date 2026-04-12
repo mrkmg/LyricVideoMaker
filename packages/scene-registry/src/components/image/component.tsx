@@ -1,5 +1,6 @@
 import React from "react";
 import type { SceneComponentDefinition } from "@lyric-video-maker/core";
+import { staticFxLayerBrowserScript } from "../../shared/static-fx-layer.browser-runtime";
 import { computeTimingOpacity } from "../../shared/timing-runtime";
 import {
   DEFAULT_IMAGE_OPTIONS,
@@ -30,6 +31,7 @@ export const imageComponent: SceneComponentDefinition<ImageComponentOptions> = {
   defaultOptions: DEFAULT_IMAGE_OPTIONS,
   browserRuntime: {
     runtimeId: "static-fx-layer",
+    browserScript: staticFxLayerBrowserScript,
     getInitialState({ instance, options, video, assets }) {
       const url = assets.getUrl(instance.id, "source");
       return buildImageInitialState(options, video, 0, url) as unknown as Record<string, unknown>;

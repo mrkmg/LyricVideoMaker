@@ -1,5 +1,6 @@
 import React from "react";
 import type { SceneComponentDefinition } from "@lyric-video-maker/core";
+import { staticFxLayerBrowserScript } from "../../shared/static-fx-layer.browser-runtime";
 import { computeTimingOpacity } from "../../shared/timing-runtime";
 import {
   DEFAULT_STATIC_TEXT_OPTIONS,
@@ -29,6 +30,7 @@ export const staticTextComponent: SceneComponentDefinition<StaticTextComponentOp
   defaultOptions: DEFAULT_STATIC_TEXT_OPTIONS,
   browserRuntime: {
     runtimeId: "static-fx-layer",
+    browserScript: staticFxLayerBrowserScript,
     getInitialState({ options, video, lyrics }) {
       const metadata = extractMetadata(lyrics);
       return buildStaticTextInitialState(options, video, 0, metadata) as unknown as Record<

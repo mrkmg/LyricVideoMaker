@@ -13,6 +13,7 @@ import {
   awaitFrameReadiness,
   createLiveDomFramePayload,
   createLiveDomScenePayload,
+  injectComponentRuntimes,
   mountLiveDomScene,
   renderPageShell,
   updateLiveDomScene
@@ -105,6 +106,7 @@ export async function createLiveDomRenderSession({
     );
     detachAssetRoutes = assetRoutes.dispose;
     await page.setContent(renderPageShell(fontCss));
+    await injectComponentRuntimes(page, components, componentLookup);
 
     const mountWarnings = await maybeMeasureAsync(profiler, "browserUpdate", async () => {
       return await mountLiveDomScene(page!, scenePayload);

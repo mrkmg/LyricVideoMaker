@@ -71,6 +71,7 @@ export function createEqualizerBrowserInitialState(
 
   const frameValues = buildRenderableBarAmplitudes(initialValues, options);
   const barPlan = buildBarRenderPlan(frameValues, options.layoutMode);
+  const gapSize = Math.max(12, options.barGap * 4);
 
   return {
     wrapperStyle: staticValues.layout.wrapperStyle,
@@ -83,7 +84,7 @@ export function createEqualizerBrowserInitialState(
     borderRadius: staticValues.barStyle.borderRadius,
     opacity: staticValues.barStyle.opacity,
     boxShadow: staticValues.barStyle.boxShadow,
-    gapSize: Math.max(12, options.barGap * 4),
+    gapSize,
     entries: barPlan.map((entry) =>
       entry.type === "gap"
         ? { type: "gap" as const }

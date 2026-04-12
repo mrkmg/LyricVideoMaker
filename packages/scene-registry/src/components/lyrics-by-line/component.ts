@@ -1,4 +1,5 @@
 import type { SceneComponentDefinition } from "@lyric-video-maker/core";
+import { lyricsByLineBrowserScript } from "./browser-runtime";
 import {
   getLyricsByLineFrameBrowserState,
   getLyricsByLineInitialBrowserState
@@ -14,6 +15,7 @@ export const lyricsByLineComponent: SceneComponentDefinition<LyricsByLineOptions
   staticWhenMarkupUnchanged: false,
   browserRuntime: {
     runtimeId: "lyrics-by-line",
+    browserScript: lyricsByLineBrowserScript,
     getInitialState: getLyricsByLineInitialBrowserState,
     getFrameState: getLyricsByLineFrameBrowserState
   },

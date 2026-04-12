@@ -1,5 +1,6 @@
 import React from "react";
 import type { SceneComponentDefinition } from "@lyric-video-maker/core";
+import { backgroundColorBrowserScript } from "./background-color.browser-runtime";
 import { withAlpha } from "../shared/color";
 
 export interface BackgroundColorOptions {
@@ -16,6 +17,7 @@ export const backgroundColorComponent: SceneComponentDefinition<BackgroundColorO
   staticWhenMarkupUnchanged: true,
   browserRuntime: {
     runtimeId: "background-color",
+    browserScript: backgroundColorBrowserScript,
     getInitialState({ options }) {
       return {
         background: `linear-gradient(180deg, ${withAlpha(options.topColor, options.topOpacity / 100)} 0%, ${withAlpha(
