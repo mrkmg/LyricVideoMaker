@@ -81,6 +81,13 @@ export async function renderLyricVideo({
   try {
     throwIfAborted(renderSignal);
 
+    progress.emit({
+      jobId: job.id,
+      status: "preparing",
+      progress: 0,
+      message: "Preloading assets"
+    });
+
     const preloadedAssets = await preloadSceneAssets(
       enabledComponents,
       componentLookup,
@@ -105,7 +112,7 @@ export async function renderLyricVideo({
     progress.emit({
       jobId: job.id,
       status: "preparing",
-      progress: 0,
+      progress: 1,
       message: "Preparing scene components"
     });
 
@@ -125,6 +132,13 @@ export async function renderLyricVideo({
         });
       })) ?? {};
 
+    progress.emit({
+      jobId: job.id,
+      status: "preparing",
+      progress: 2,
+      message: "Extracting video frames"
+    });
+
     const extractionResult = await measureAsync(profiler, "prepare", async () => {
       return await prepareVideoFrameExtractions({
         job,
@@ -143,6 +157,13 @@ export async function renderLyricVideo({
     });
 
     logger.info(`Using ${workerCount} Chromium render worker${workerCount === 1 ? "" : "s"}.`);
+
+    progress.emit({
+      jobId: job.id,
+      status: "preparing",
+      progress: 3,
+      message: `Launching ${workerCount} render worker${workerCount === 1 ? "" : "s"}`
+    });
 
     for (let workerIndex = 0; workerIndex < workerCount; workerIndex += 1) {
       workerHandles.push({
@@ -200,7 +221,7 @@ export async function renderLyricVideo({
         progress.emit({
           jobId: job.id,
           status: "rendering",
-          progress: (framesWritten / job.video.durationInFrames) * 85,
+          progress: 5 + (framesWritten / job.video.durationInFrames) * 94,
           message: `Rendering frame ${framesWritten} of ${job.video.durationInFrames}`,
           etaMs,
           renderFps: Number(renderFps.toFixed(2))
@@ -258,7 +279,7 @@ export async function renderLyricVideo({
     progress.emit({
       jobId: job.id,
       status: "muxing",
-      progress: 90,
+      progress: 99,
       message: "Muxing frames with source audio"
     });
 
