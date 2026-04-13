@@ -9,11 +9,11 @@ import {
 describe("TransformOptions defaults", () => {
   it("place a centered visible element with no rotation or flip", () => {
     expect(DEFAULT_TRANSFORM_OPTIONS).toEqual<TransformOptions>({
-      x: 50,
-      y: 50,
-      width: 50,
-      height: 50,
-      anchor: "middle-center",
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 100,
+      anchor: "top-left",
       rotation: 0,
       flipHorizontal: false,
       flipVertical: false

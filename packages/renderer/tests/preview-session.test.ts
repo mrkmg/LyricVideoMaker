@@ -22,7 +22,7 @@ const previewRuntime = vi.hoisted(() => {
         Array.isArray((payload as { components: unknown[] }).components)
       ) {
         const candidate = payload as { components: Array<Record<string, unknown>> };
-        if (candidate.components[0]?.runtimeId) {
+        if (candidate.components[0]?.componentId) {
           return { warnings: [] };
         }
       }

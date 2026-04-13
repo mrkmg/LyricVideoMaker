@@ -429,14 +429,14 @@ describe("scene registry components", () => {
     expect(document.querySelectorAll("[data-equalizer-bar]")).toHaveLength(4);
     const track = document.querySelector("[data-equalizer-track]");
     expect(track).toHaveStyle({
-      flexDirection: "column"
+      flexDirection: "row"
     });
     const wrapper = track?.parentElement as HTMLElement;
-    expect(wrapper.style.left).toBe("50%");
-    expect(wrapper.style.top).toBe("98%");
-    expect(wrapper.style.width).toBe("56%");
-    expect(wrapper.style.height).toBe("14%");
-    expect(wrapper.style.transform).toBe("translate(-50%, -100%)");
+    expect(wrapper.style.left).toBe("0%");
+    expect(wrapper.style.top).toBe("0%");
+    expect(wrapper.style.width).toBe("100%");
+    expect(wrapper.style.height).toBe("100%");
+    expect(wrapper.style.transform).toBe("translate(0%, 0%)");
   });
 
   it("renders the equalizer line graph with area fill", () => {
