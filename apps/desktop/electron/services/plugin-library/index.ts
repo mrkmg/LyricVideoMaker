@@ -158,6 +158,60 @@ export async function importPluginFromSource(
   }
 }
 
+export async function updatePlugin(
+  userDataPath: string,
+  pluginId: string,
+  options: ImportPluginOptions = {}
+): Promise<LoadedPlugin> {
+  const summaries = await readInstalledPluginSummaries(userDataPath);
+  const existing = summaries.find((plugin) => plugin.id === pluginId);
+  if (!existing) {
+    throw new Error(`Plugin "${pluginId}" is not installed.`);
+  }
+
+  const source = await resolveImportSource(existing.url);
+  const rootDir = getPluginRootDir(userDataPath);
+  const tmpDir = join(rootDir, "tmp", `plugin-update-${Date.now()}`);
+  await mkdir(tmpDir, { recursive: true });
+
+  try {
+    if (source.kind === "github") {
+      await execFileAsync("git", ["clone", "--depth", "1", source.url, tmpDir], {
+        windowsHide: true
+      });
+    } else {
+      await copyLocalPluginSource(source.path, tmpDir);
+    }
+
+    const manifest = await readPluginManifest(tmpDir);
+    if (manifest.id !== pluginId) {
+      throw new Error(
+        `Updated plugin id "${manifest.id}" does not match installed id "${pluginId}".`
+      );
+    }
+
+    const plugin = await loadPluginFromRepo(existing.url, tmpDir);
+    validatePluginSet([plugin], options);
+
+    const repoDir = resolve(existing.repoDir);
+    const repoRoot = resolve(getPluginRepoRootDir(userDataPath));
+    if (!isPathInside(repoRoot, repoDir)) {
+      throw new Error(`Refusing to update plugin repo outside plugin directory: ${existing.repoDir}`);
+    }
+
+    await rm(repoDir, { recursive: true, force: true });
+    await rename(tmpDir, repoDir);
+
+    const updated = await loadPluginFromRepo(existing.url, repoDir);
+    const nextSummaries = summaries.map((s) => (s.id === pluginId ? updated.summary : s));
+    await writeInstalledPluginSummaries(userDataPath, nextSummaries);
+    return updated;
+  } catch (error) {
+    await rm(tmpDir, { recursive: true, force: true });
+    throw error;
+  }
+}
+
 export async function removePlugin(userDataPath: string, pluginId: string): Promise<void> {
   const summaries = await readInstalledPluginSummaries(userDataPath);
   const summary = summaries.find((plugin) => plugin.id === pluginId);

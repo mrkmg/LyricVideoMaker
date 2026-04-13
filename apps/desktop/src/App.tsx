@@ -174,6 +174,22 @@ export function App() {
     }
   }
 
+  async function handleUpdatePlugin(pluginId: string) {
+    const nextBootstrap = await lyricVideoApp.updatePlugin(pluginId);
+    setBootstrap(nextBootstrap);
+    const selectedSceneStillExists = nextBootstrap.scenes.some(
+      (scene) => scene.id === composer.composer.scene?.id
+    );
+    if (!selectedSceneStillExists && nextBootstrap.scenes[0]) {
+      composer.selectScene(nextBootstrap.scenes, nextBootstrap.scenes[0].id);
+    }
+    setComponentToAddId((current) =>
+      nextBootstrap.components.some((component) => component.id === current)
+        ? current
+        : nextBootstrap.components[0]?.id ?? ""
+    );
+  }
+
   async function handleRemovePlugin(pluginId: string) {
     const nextBootstrap = await lyricVideoApp.removePlugin(pluginId);
     setBootstrap(nextBootstrap);
@@ -207,6 +223,7 @@ export function App() {
           onSceneDescriptionChange={composer.setSceneDescription}
           onImportScene={() => void composer.importScene()}
           onImportPlugin={(url) => void handleImportPlugin(url)}
+          onUpdatePlugin={(pluginId) => void handleUpdatePlugin(pluginId)}
           onRemovePlugin={(pluginId) => void handleRemovePlugin(pluginId)}
           onExportScene={() => void composer.exportScene()}
           onSaveScene={() => void composer.saveScene()}

@@ -15,6 +15,7 @@ const api: ElectronApi = {
   exportScene: (scene) => ipcRenderer.invoke("scene:export", scene),
   listPlugins: () => ipcRenderer.invoke("plugin:list"),
   importPlugin: (url) => ipcRenderer.invoke("plugin:import", url),
+  updatePlugin: (pluginId) => ipcRenderer.invoke("plugin:update", pluginId),
   removePlugin: (pluginId) => ipcRenderer.invoke("plugin:remove", pluginId),
   savePaneLayout: (panes) => ipcRenderer.invoke("layout:save-pane-layout", panes),
   setupFfmpeg: () => ipcRenderer.invoke("app:setup-ffmpeg"),

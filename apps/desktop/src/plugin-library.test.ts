@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
@@ -7,7 +7,8 @@ import {
   copyPluginFixtureToLocalDir,
   importPluginFromSource,
   loadInstalledPlugins,
-  removePlugin
+  removePlugin,
+  updatePlugin
 } from "../electron/services/plugin-library";
 
 const fixtureDir = join(process.cwd(), "examples", "external-plugin-basic");
@@ -62,6 +63,48 @@ describe("external plugin library", () => {
     await expect(importPluginFromSource(userDataPath, sourceDir)).rejects.toThrow(
       "escapes the repository"
     );
+  });
+
+  it("updates a plugin from a changed local source", async () => {
+    const { sourceDir, userDataPath } = await createLocalFixture();
+
+    const plugin = await importPluginFromSource(userDataPath, sourceDir);
+    expect(plugin.summary.version).toBe("0.1.0");
+
+    // Bump version in the source fixture
+    const manifestPath = join(sourceDir, "lyric-video-plugin.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    manifest.version = "0.2.0";
+    await writeFile(manifestPath, JSON.stringify(manifest, null, 2), "utf8");
+
+    const updated = await updatePlugin(userDataPath, plugin.summary.id);
+    expect(updated.summary.version).toBe("0.2.0");
+    expect(updated.summary.id).toBe("example.caption-pack");
+    expect(existsSync(updated.summary.repoDir)).toBe(true);
+
+    const reloaded = await loadInstalledPlugins(userDataPath);
+    expect(reloaded).toHaveLength(1);
+    expect(reloaded[0].summary.version).toBe("0.2.0");
+  });
+
+  it("rejects update when plugin id changes", async () => {
+    const { sourceDir, userDataPath } = await createLocalFixture();
+
+    await importPluginFromSource(userDataPath, sourceDir);
+
+    const manifestPath = join(sourceDir, "lyric-video-plugin.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    manifest.id = "example.different-pack";
+    await writeFile(manifestPath, JSON.stringify(manifest, null, 2), "utf8");
+
+    await expect(updatePlugin(userDataPath, "example.caption-pack")).rejects.toThrow(
+      "does not match installed id"
+    );
+
+    // Original plugin still intact
+    const reloaded = await loadInstalledPlugins(userDataPath);
+    expect(reloaded).toHaveLength(1);
+    expect(reloaded[0].summary.id).toBe("example.caption-pack");
   });
 
   it("rejects component id conflicts", async () => {

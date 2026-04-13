@@ -20,6 +20,7 @@ export function SceneDetailsEditor({
   onSceneDescriptionChange,
   onImportScene,
   onImportPlugin,
+  onUpdatePlugin,
   onRemovePlugin,
   onExportScene,
   onSaveScene,
@@ -39,6 +40,7 @@ export function SceneDetailsEditor({
   onSceneDescriptionChange: (description: string) => void;
   onImportScene: () => void | Promise<void>;
   onImportPlugin: (url: string) => void | Promise<void>;
+  onUpdatePlugin: (pluginId: string) => void | Promise<void>;
   onRemovePlugin: (pluginId: string) => void | Promise<void>;
   onExportScene: () => void | Promise<void>;
   onSaveScene: () => void | Promise<void>;
@@ -49,6 +51,7 @@ export function SceneDetailsEditor({
   const [pluginUrl, setPluginUrl] = useState("");
   const [pluginError, setPluginError] = useState("");
   const [isPluginImporting, setIsPluginImporting] = useState(false);
+  const [pluginUpdatingId, setPluginUpdatingId] = useState<string | null>(null);
 
   function handleScenePickerChange(nextSceneId: string) {
     if (nextSceneId === selectedScene.id) {
@@ -82,6 +85,18 @@ export function SceneDetailsEditor({
       setPluginError(error instanceof Error ? error.message : String(error));
     } finally {
       setIsPluginImporting(false);
+    }
+  }
+
+  async function handleUpdatePlugin(pluginId: string) {
+    setPluginUpdatingId(pluginId);
+    setPluginError("");
+    try {
+      await onUpdatePlugin(pluginId);
+    } catch (error) {
+      setPluginError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setPluginUpdatingId(null);
     }
   }
 
@@ -257,13 +272,23 @@ export function SceneDetailsEditor({
                       {plugin.version} - {plugin.componentCount} components - {plugin.sceneCount} scenes
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    className="secondary danger"
-                    onClick={() => void handleRemovePlugin(plugin.id)}
-                  >
-                    Remove
-                  </button>
+                  <div className="button-row">
+                    <button
+                      type="button"
+                      className="secondary"
+                      disabled={pluginUpdatingId !== null}
+                      onClick={() => void handleUpdatePlugin(plugin.id)}
+                    >
+                      {pluginUpdatingId === plugin.id ? "Updating..." : "Update"}
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary danger"
+                      onClick={() => void handleRemovePlugin(plugin.id)}
+                    >
+                      Remove
+                    </button>
+                  </div>
                 </div>
               ))
             )}

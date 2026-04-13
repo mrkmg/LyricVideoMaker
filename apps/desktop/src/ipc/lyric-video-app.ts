@@ -20,6 +20,7 @@ export const lyricVideoApp: ElectronApi = {
   exportScene: (scene) => window.lyricVideoApp.exportScene(scene),
   listPlugins: () => window.lyricVideoApp.listPlugins(),
   importPlugin: (url) => window.lyricVideoApp.importPlugin(url),
+  updatePlugin: (pluginId) => window.lyricVideoApp.updatePlugin(pluginId),
   removePlugin: (pluginId) => window.lyricVideoApp.removePlugin(pluginId),
   savePaneLayout: (panes) => window.lyricVideoApp.savePaneLayout(panes),
   setupFfmpeg: () => window.lyricVideoApp.setupFfmpeg(),

@@ -112,6 +112,7 @@ export interface ElectronApi {
   exportScene(scene: SerializedSceneDefinition): Promise<string | null>;
   listPlugins(): Promise<InstalledPluginSummary[]>;
   importPlugin(url: string): Promise<AppBootstrapData>;
+  updatePlugin(pluginId: string): Promise<AppBootstrapData>;
   removePlugin(pluginId: string): Promise<AppBootstrapData>;
   savePaneLayout(panes: PaneLayoutPreferences): Promise<void>;
   setupFfmpeg(): Promise<SetupFfmpegResult>;
