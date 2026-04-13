@@ -1,6 +1,6 @@
 {
   "name": "@lyric-video-maker/plugin-base",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Plugin SDK for Lyric Video Maker",
   "license": "MIT",
   "author": "Kevin Gravier",
