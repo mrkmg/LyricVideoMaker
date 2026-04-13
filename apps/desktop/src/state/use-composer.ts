@@ -37,6 +37,7 @@ export interface ComposerActions {
   setRenderEncoding(value: RenderEncoding): void;
   setRenderQuality(value: RenderQuality): void;
   selectScene(scenes: SerializedSceneDefinition[], sceneId: string): void;
+  mergeSceneComponents(scenes: SerializedSceneDefinition[], sceneId: string): void;
   saveScene(): Promise<void>;
   deleteScene(scenes: SerializedSceneDefinition[]): Promise<void>;
   importScene(): Promise<void>;
@@ -160,6 +161,29 @@ export function useComposer(
       setSelection({ type: "scene" });
     },
     [setSelection]
+  );
+
+  const mergeSceneComponents = useCallback(
+    (scenes: SerializedSceneDefinition[], sceneId: string) => {
+      const sourceScene = scenes.find((scene) => scene.id === sceneId);
+      if (!sourceScene) {
+        return;
+      }
+      const clonedComponents = sourceScene.components.map((component) => ({
+        ...cloneComponent(component),
+        id: createInstanceId(component.componentId)
+      }));
+      setComposer((current) => ({
+        ...current,
+        scene: current.scene
+          ? {
+              ...current.scene,
+              components: [...current.scene.components, ...clonedComponents]
+            }
+          : cloneScene(sourceScene)
+      }));
+    },
+    []
   );
 
   const saveScene = useCallback(async () => {
@@ -329,6 +353,7 @@ export function useComposer(
     setRenderEncoding,
     setRenderQuality,
     selectScene,
+    mergeSceneComponents,
     saveScene,
     deleteScene,
     importScene,

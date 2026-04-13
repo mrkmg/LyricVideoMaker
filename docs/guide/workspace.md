@@ -84,7 +84,7 @@ Click the **Scene** button at the top of the Scene Builder to switch to the Scen
 
 From here you can:
 
-- **Choose a scene preset** — Select from built-in scenes, your saved scenes, or plugin-provided scenes.
+- **Choose a scene preset** — Select from built-in scenes, your saved scenes, or plugin-provided scenes. When the current scene already has components you can choose to **Replace** the scene entirely or **Add to Existing** to append the new scene's components to the current stack.
 - **Import / Export JSON** — Share scene configurations as JSON files.
 - **Save as User Scene** — Save your current component arrangement as a reusable scene preset.
 - **Manage plugins** — Install or remove plugins that add new components and scenes. See [Plugins](/guide/plugins) for details.

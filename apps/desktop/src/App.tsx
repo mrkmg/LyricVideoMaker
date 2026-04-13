@@ -202,6 +202,7 @@ export function App() {
           components={components}
           componentCatalog={componentCatalog}
           onSceneChange={(sceneId) => composer.selectScene(scenes, sceneId)}
+          onMergeSceneComponents={(sceneId) => composer.mergeSceneComponents(scenes, sceneId)}
           onSceneNameChange={composer.setSceneName}
           onSceneDescriptionChange={composer.setSceneDescription}
           onImportScene={() => void composer.importScene()}

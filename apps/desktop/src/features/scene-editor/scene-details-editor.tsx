@@ -15,6 +15,7 @@ export function SceneDetailsEditor({
   components,
   componentCatalog,
   onSceneChange,
+  onMergeSceneComponents,
   onSceneNameChange,
   onSceneDescriptionChange,
   onImportScene,
@@ -32,6 +33,7 @@ export function SceneDetailsEditor({
   components: SerializedSceneComponentDefinition[];
   componentCatalog: ReadonlyMap<string, SerializedSceneComponentDefinition>;
   onSceneChange: (sceneId: string) => void;
+  onMergeSceneComponents: (sceneId: string) => void;
   onSceneNameChange: (name: string) => void;
   onSceneDescriptionChange: (description: string) => void;
   onImportScene: () => void | Promise<void>;
@@ -41,9 +43,21 @@ export function SceneDetailsEditor({
   onSaveScene: () => void | Promise<void>;
   onDeleteScene: () => void | Promise<void>;
 }) {
+  const [pendingSceneId, setPendingSceneId] = useState<string | null>(null);
   const [pluginUrl, setPluginUrl] = useState("");
   const [pluginError, setPluginError] = useState("");
   const [isPluginImporting, setIsPluginImporting] = useState(false);
+
+  function handleScenePickerChange(nextSceneId: string) {
+    if (nextSceneId === selectedScene.id) {
+      return;
+    }
+    if (selectedScene.components.length === 0) {
+      onSceneChange(nextSceneId);
+      return;
+    }
+    setPendingSceneId(nextSceneId);
+  }
 
   async function handleImportPlugin() {
     const url = pluginUrl.trim();
@@ -93,7 +107,7 @@ export function SceneDetailsEditor({
           <div className="inspector-grid inspector-grid-two">
             <label className="field">
               <span>Scene preset</span>
-              <select value={selectedScene.id} onChange={(event) => onSceneChange(event.target.value)}>
+              <select value={selectedScene.id} onChange={(event) => handleScenePickerChange(event.target.value)}>
                 <optgroup label="Built-in">
                   {builtInScenes.map((scene) => (
                     <option key={scene.id} value={scene.id}>
@@ -246,6 +260,42 @@ export function SceneDetailsEditor({
         </section>
       
       </div>
+
+      {pendingSceneId !== null && (
+        <div className="dialog-backdrop" role="presentation">
+          <div className="dialog-card" role="dialog" aria-modal="true" aria-labelledby="scene-change-dialog-title">
+            <div className="panel-header">
+              <div>
+                <p className="eyebrow">Scene Change</p>
+                <h2 id="scene-change-dialog-title">Replace or Add Components?</h2>
+              </div>
+            </div>
+            <div className="dialog-body">
+              <p>
+                The current scene has {selectedScene.components.length} component{selectedScene.components.length !== 1 ? "s" : ""}.
+                You can replace the entire scene or add the new scene's components to the existing stack.
+              </p>
+            </div>
+            <div className="dialog-actions">
+              <button type="button" className="secondary" onClick={() => setPendingSceneId(null)}>
+                Cancel
+              </button>
+              <button type="button" className="secondary" onClick={() => {
+                onMergeSceneComponents(pendingSceneId);
+                setPendingSceneId(null);
+              }}>
+                Add to Existing
+              </button>
+              <button type="button" className="primary" onClick={() => {
+                onSceneChange(pendingSceneId);
+                setPendingSceneId(null);
+              }}>
+                Replace
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

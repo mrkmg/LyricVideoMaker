@@ -12,7 +12,12 @@ Scenes can come from three sources:
 - **User** — Scenes you've saved yourself.
 - **Plugin** — Added by installed plugins.
 
-You can select a scene from the dropdown in the Scene Editor (click the **Scene** button at the top of the Scene Builder panel).
+You can select a scene from the dropdown in the Scene Editor (click the **Scene** button at the top of the Scene Builder panel). When you pick a different scene and the current scene already has components, a dialog asks how to apply it:
+
+- **Replace** — Swap the entire scene, removing all current components.
+- **Add to Existing** — Keep the current scene and append the new scene's components to the stack.
+
+If the current scene has no components the new scene is loaded directly without prompting.
 
 ## What is a Component?
 
