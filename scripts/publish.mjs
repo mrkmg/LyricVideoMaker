@@ -10,6 +10,12 @@ const outDir = join(rootDir, "publish");
 
 const workspacePackages = [
   {
+    name: "@lyric-video-maker/plugin-base",
+    sourceDir: join(rootDir, "packages", "plugin-base"),
+    stageDir: join(stageDir, "packages", "plugin-base"),
+    stageDependency: "file:packages/plugin-base"
+  },
+  {
     name: "@lyric-video-maker/core",
     sourceDir: join(rootDir, "packages", "core"),
     stageDir: join(stageDir, "packages", "core"),
