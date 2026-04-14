@@ -25,6 +25,7 @@ export const lyricVideoApp: ElectronApi = {
   removePlugin: (pluginId) => window.lyricVideoApp.removePlugin(pluginId),
   savePaneLayout: (panes) => window.lyricVideoApp.savePaneLayout(panes),
   setupFfmpeg: () => window.lyricVideoApp.setupFfmpeg(),
+  readFileBytes: (filePath) => window.lyricVideoApp.readFileBytes(filePath),
   disposePreview: () => window.lyricVideoApp.disposePreview(),
   cancelRender: (jobId) => window.lyricVideoApp.cancelRender(jobId),
   onRenderProgress: (callback) => window.lyricVideoApp.onRenderProgress(callback),

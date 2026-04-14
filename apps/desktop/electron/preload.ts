@@ -20,6 +20,7 @@ const api: ElectronApi = {
   removePlugin: (pluginId) => ipcRenderer.invoke("plugin:remove", pluginId),
   savePaneLayout: (panes) => ipcRenderer.invoke("layout:save-pane-layout", panes),
   setupFfmpeg: () => ipcRenderer.invoke("app:setup-ffmpeg"),
+  readFileBytes: (filePath) => ipcRenderer.invoke("file:read-bytes", filePath),
   disposePreview: () => ipcRenderer.invoke("preview:dispose"),
   cancelRender: (jobId) => ipcRenderer.invoke("render:cancel", jobId),
   onRenderProgress: (callback) => {

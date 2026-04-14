@@ -117,6 +117,7 @@ export interface ElectronApi {
   removePlugin(pluginId: string): Promise<AppBootstrapData>;
   savePaneLayout(panes: PaneLayoutPreferences): Promise<void>;
   setupFfmpeg(): Promise<SetupFfmpegResult>;
+  readFileBytes(filePath: string): Promise<Uint8Array>;
   disposePreview(): Promise<void>;
   cancelRender(jobId: string): Promise<void>;
   onRenderProgress(callback: (event: RenderProgressEvent) => void): () => void;

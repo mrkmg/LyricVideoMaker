@@ -3,6 +3,7 @@ import { durationMsToFrameCount } from "@lyric-video-maker/core";
 import type { ComposerState } from "../../state/composer-types";
 import { InfoTip } from "../../components/ui/form-fields";
 import { useFramePreview } from "../../hooks/use-frame-preview";
+import { usePreviewAudio } from "../../hooks/use-preview-audio";
 
 export function PreviewPanel({
   paused,
@@ -28,6 +29,11 @@ export function PreviewPanel({
     composer,
     paused: paused || !ffmpegAvailable,
     profilerEnabled
+  });
+  usePreviewAudio({
+    audioPath: composer.audioPath,
+    isPlaying,
+    requestedTimeMs: preview.requestedTimeMs
   });
   const enabled = framePreviewEnabled && ffmpegAvailable;
   const video = composer.video;

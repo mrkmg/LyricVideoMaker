@@ -103,6 +103,7 @@ describe("App", () => {
       updatePlugin: vi.fn().mockResolvedValue(createBootstrapData()),
       savePaneLayout: vi.fn().mockResolvedValue(undefined),
       setupFfmpeg: vi.fn().mockResolvedValue({ available: true }),
+      readFileBytes: vi.fn().mockResolvedValue(new Uint8Array()),
       disposePreview: vi.fn().mockResolvedValue(undefined),
       cancelRender: vi.fn().mockResolvedValue(undefined),
       onRenderProgress: vi.fn((callback) => {

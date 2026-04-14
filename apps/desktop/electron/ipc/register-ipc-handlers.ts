@@ -8,6 +8,7 @@ import type { SubtitleGenerationRunner } from "../services/subtitle-generator";
 import { registerAppSettingsHandlers } from "./app-settings-handlers";
 import { registerBootstrapHandlers } from "./bootstrap-handlers";
 import { registerDialogHandlers } from "./dialog-handlers";
+import { registerFileHandlers } from "./file-handlers";
 import { registerSceneHandlers } from "./scene-handlers";
 import { registerRenderHandlers } from "./render-handlers";
 import { registerSubtitleHandlers } from "./subtitle-handlers";
@@ -37,6 +38,7 @@ export function registerIpcHandlers(deps: IpcDeps) {
   registerAppSettingsHandlers(deps);
   registerBootstrapHandlers(deps);
   registerDialogHandlers(deps);
+  registerFileHandlers();
   registerSceneHandlers(deps);
   registerRenderHandlers(deps);
   registerSubtitleHandlers(deps);

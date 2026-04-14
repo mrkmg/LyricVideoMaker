@@ -37,6 +37,7 @@ describe("useFramePreview", () => {
       updatePlugin: vi.fn(),
       savePaneLayout: vi.fn(),
       setupFfmpeg: vi.fn().mockResolvedValue({ available: true }),
+      readFileBytes: vi.fn().mockResolvedValue(new Uint8Array()),
       disposePreview: vi.fn().mockResolvedValue(undefined),
       cancelRender: vi.fn(),
       onRenderProgress: vi.fn(() => () => undefined),
