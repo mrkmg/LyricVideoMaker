@@ -40,6 +40,21 @@ describe("timeline helpers", () => {
     expect(frameToMs(30, 30)).toBe(1000);
   });
 
+  it("round-trips frameToMs → msToFrame without floating-point drift", () => {
+    for (const fps of [24, 25, 30, 48, 50, 60]) {
+      for (let frame = 0; frame < 8000; frame++) {
+        const ms = frameToMs(frame, fps);
+        const roundTrip = msToFrame(ms, fps);
+        if (roundTrip !== frame) {
+          throw new Error(
+            `Round-trip failed at fps=${fps} frame=${frame}: ` +
+            `frameToMs=${ms}, msToFrame=${roundTrip}`
+          );
+        }
+      }
+    }
+  });
+
   it("builds a frame runtime", () => {
     const runtime = createLyricRuntime(cues, 1600);
     expect(runtime.current?.text).toBe("Two");

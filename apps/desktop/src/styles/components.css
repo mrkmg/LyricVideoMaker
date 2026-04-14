@@ -554,6 +554,24 @@
   border-top: 1px solid var(--pane-border);
 }
 
+.preview-transport {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-inline-sm);
+}
+
+.preview-play-button {
+  min-width: 2.4rem;
+  font-size: 1rem;
+}
+
+.preview-play-button.is-active {
+  background: rgba(142, 201, 255, 0.12);
+  border-color: rgba(142, 201, 255, 0.24);
+  color: var(--accent);
+}
+
 .preview-scrubber input[type="range"] {
   width: 100%;
 }

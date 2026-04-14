@@ -15,12 +15,20 @@ export function PreviewPanel({
   profilerEnabled?: boolean;
   ffmpegAvailable: boolean;
 }) {
-  const { enabled: framePreviewEnabled, preview, updatePreviewTime, noteImagePainted } =
-    useFramePreview({
-      composer,
-      paused: paused || !ffmpegAvailable,
-      profilerEnabled
-    });
+  const {
+    enabled: framePreviewEnabled,
+    preview,
+    isPlaying,
+    updatePreviewTime,
+    togglePlayback,
+    stepForward,
+    stepBackward,
+    noteImagePainted
+  } = useFramePreview({
+    composer,
+    paused: paused || !ffmpegAvailable,
+    profilerEnabled
+  });
   const enabled = framePreviewEnabled && ffmpegAvailable;
   const video = composer.video;
   const frameCount = preview.result
@@ -128,6 +136,33 @@ export function PreviewPanel({
           <p className="video-param-hint">Preview is paused while the render is running.</p>
         ) : null}
         {preview.error ? <p className="error-banner">{preview.error}</p> : null}
+
+        <div className="preview-transport">
+          <button
+            className="secondary icon-button"
+            disabled={!enabled || paused || !preview.result || preview.result.frame <= 0}
+            onClick={stepBackward}
+            title="Previous frame"
+          >
+            {"\u23EE"}
+          </button>
+          <button
+            className={`secondary icon-button preview-play-button${isPlaying ? " is-active" : ""}`}
+            disabled={!enabled || paused}
+            onClick={togglePlayback}
+            title={isPlaying ? "Pause" : "Play"}
+          >
+            {isPlaying ? "\u23F8" : "\u25B6"}
+          </button>
+          <button
+            className="secondary icon-button"
+            disabled={!enabled || paused || !preview.result || preview.result.frame >= frameCount - 1}
+            onClick={stepForward}
+            title="Next frame"
+          >
+            {"\u23ED"}
+          </button>
+        </div>
 
         <label className="field preview-scrubber">
           <input
