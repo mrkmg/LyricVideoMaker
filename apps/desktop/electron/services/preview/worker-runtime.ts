@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { performance } from "node:perf_hooks";
 import { workerData } from "node:worker_threads";
 import {
@@ -144,6 +144,10 @@ async function getOrCreatePreviewSession(request: RenderPreviewRequest) {
     const pluginBundleSources = loadedPlugins.map((plugin) => plugin.bundleSource);
     const pluginRepoDirs = new Map(
       loadedPlugins.map((plugin) => [plugin.summary.id, plugin.summary.repoDir])
+    );
+    pluginRepoDirs.set(
+      "scene-registry",
+      join(dirname(require.resolve("@lyric-video-maker/scene-registry")), "..")
     );
     const resolver = createPluginAssetResolver(() => pluginRepoDirs);
     const componentDefinitions = [...builtInSceneComponents, ...pluginComponents];

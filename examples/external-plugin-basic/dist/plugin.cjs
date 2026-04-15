@@ -24,15 +24,13 @@ __export(plugin_exports, {
 });
 module.exports = __toCommonJS(plugin_exports);
 
-// ../../packages/plugin-base/dist/index.js
+// ../../packages/plugin-base/dist/plugin-assets.js
 var PLUGIN_ASSET_PREFIX = "plugin-asset://";
 function createPluginAssetUri(pluginId, relativePath) {
   const normalizedPath = relativePath.replace(/\\/g, "/");
   const segments = normalizedPath.split("/");
   if (segments.some((segment) => segment === "..")) {
-    throw new Error(
-      `Plugin asset path must not contain ".." segments: "${relativePath}"`
-    );
+    throw new Error(`Plugin asset path must not contain ".." segments: "${relativePath}"`);
   }
   return `${PLUGIN_ASSET_PREFIX}${pluginId}/${normalizedPath}`;
 }
@@ -41,23 +39,23 @@ function createPluginAssetUri(pluginId, relativePath) {
 function activate(host) {
   const { React } = host;
   const {
-    transformCategory,
-    timingCategory,
-    DEFAULT_TRANSFORM_OPTIONS,
-    DEFAULT_TIMING_OPTIONS,
-    computeTransformStyle,
-    computeTimingOpacity
+    transformCategory: transformCategory2,
+    timingCategory: timingCategory2,
+    DEFAULT_TRANSFORM_OPTIONS: DEFAULT_TRANSFORM_OPTIONS2,
+    DEFAULT_TIMING_OPTIONS: DEFAULT_TIMING_OPTIONS2,
+    computeTransformStyle: computeTransformStyle2,
+    computeTimingOpacity: computeTimingOpacity2
   } = host.transform;
   const defaultOptions = {
-    ...DEFAULT_TRANSFORM_OPTIONS,
-    ...DEFAULT_TIMING_OPTIONS,
+    ...DEFAULT_TRANSFORM_OPTIONS2,
+    ...DEFAULT_TIMING_OPTIONS2,
     textColor: "#ffffff",
     backgroundColor: "#111827",
     fontSize: 72
   };
   const options = [
-    transformCategory,
-    timingCategory,
+    transformCategory2,
+    timingCategory2,
     { id: "textColor", label: "Text color", type: "color", defaultValue: "#ffffff" },
     { id: "backgroundColor", label: "Background color", type: "color", defaultValue: "#111827" },
     {
@@ -79,8 +77,8 @@ function activate(host) {
     defaultOptions,
     Component({ options: options2, lyrics, video, timeMs }) {
       const text = lyrics.current?.text ?? "External caption plugin";
-      const transformStyle = computeTransformStyle(options2, video);
-      const opacity = computeTimingOpacity(timeMs, options2);
+      const transformStyle = computeTransformStyle2(options2, video);
+      const opacity = computeTimingOpacity2(timeMs, options2);
       return React.createElement(
         "div",
         {

@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { ipcMain } from "electron";
 import { createPluginAssetUri } from "@lyric-video-maker/core";
 import { builtInSceneComponents } from "@lyric-video-maker/scene-registry";
@@ -34,7 +34,14 @@ export function registerRenderHandlers({
     const durationMs = await getAudioDuration(request.audioPath);
     const componentDefinitions = [...builtInSceneComponents, ...pluginCatalog.components()];
     const pluginBundleSources = pluginCatalog.pluginBundleSources();
-    const resolver = createPluginAssetResolver(() => pluginCatalog.getRepoDirs());
+    const resolver = createPluginAssetResolver(() => {
+      const dirs = pluginCatalog.getRepoDirs();
+      dirs.set(
+        "scene-registry",
+        join(dirname(require.resolve("@lyric-video-maker/scene-registry")), "..")
+      );
+      return dirs;
+    });
     const job = buildRenderJob({
       request,
       componentDefinitions,
