@@ -264,33 +264,52 @@ export function SceneDetailsEditor({
             {plugins.length === 0 ? (
               <div className="workspace-empty-state">No external plugins installed.</div>
             ) : (
-              plugins.map((plugin) => (
-                <div key={plugin.id} className="plugin-row">
-                  <div>
-                    <strong>{plugin.name}</strong>
-                    <p>
-                      {plugin.version} - {plugin.componentCount} components - {plugin.sceneCount} scenes
-                    </p>
+              plugins.map((plugin) => {
+                const isIncompatible = Boolean(plugin.loadError);
+                return (
+                  <div
+                    key={plugin.id}
+                    className={`plugin-row${isIncompatible ? " plugin-row-incompatible" : ""}`}
+                  >
+                    <div>
+                      <div className="plugin-row-title">
+                        <strong>{plugin.name}</strong>
+                        {isIncompatible ? (
+                          <span
+                            className="plugin-row-badge"
+                            title={plugin.loadError}
+                          >
+                            Incompatible
+                          </span>
+                        ) : null}
+                      </div>
+                      <p>
+                        {plugin.version} - {plugin.componentCount} components - {plugin.sceneCount} scenes
+                      </p>
+                      {isIncompatible ? (
+                        <p className="plugin-row-error">{plugin.loadError}</p>
+                      ) : null}
+                    </div>
+                    <div className="button-row">
+                      <button
+                        type="button"
+                        className="secondary"
+                        disabled={pluginUpdatingId !== null}
+                        onClick={() => void handleUpdatePlugin(plugin.id)}
+                      >
+                        {pluginUpdatingId === plugin.id ? "Updating..." : "Update"}
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary danger"
+                        onClick={() => void handleRemovePlugin(plugin.id)}
+                      >
+                        Remove
+                      </button>
+                    </div>
                   </div>
-                  <div className="button-row">
-                    <button
-                      type="button"
-                      className="secondary"
-                      disabled={pluginUpdatingId !== null}
-                      onClick={() => void handleUpdatePlugin(plugin.id)}
-                    >
-                      {pluginUpdatingId === plugin.id ? "Updating..." : "Update"}
-                    </button>
-                    <button
-                      type="button"
-                      className="secondary danger"
-                      onClick={() => void handleRemovePlugin(plugin.id)}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </section>

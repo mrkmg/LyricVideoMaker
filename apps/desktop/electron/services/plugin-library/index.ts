@@ -39,6 +39,7 @@ export interface InstalledPluginSummary {
   repoDir: string;
   componentCount: number;
   sceneCount: number;
+  loadError?: string;
 }
 
 export interface LoadedPlugin {
@@ -47,6 +48,11 @@ export interface LoadedPlugin {
   modifiers: ModifierDefinition<Record<string, unknown>>[];
   scenes: SceneDefinition[];
   bundleSource: string;
+}
+
+export interface LoadInstalledPluginsResult {
+  loaded: LoadedPlugin[];
+  failed: InstalledPluginSummary[];
 }
 
 interface PluginManifest {
@@ -96,25 +102,38 @@ export async function loadInstalledPlugins(
   userDataPath: string,
   options: LoadInstalledPluginOptions = {}
 ): Promise<LoadedPlugin[]> {
+  const { loaded } = await loadInstalledPluginsWithStatus(userDataPath, options);
+  return loaded;
+}
+
+export async function loadInstalledPluginsWithStatus(
+  userDataPath: string,
+  options: LoadInstalledPluginOptions = {}
+): Promise<LoadInstalledPluginsResult> {
   const summaries = await readInstalledPluginSummaries(userDataPath);
   const settled = await Promise.allSettled(
     summaries.map((summary) => loadPluginFromRepo(summary.url, summary.repoDir))
   );
-  const plugins: LoadedPlugin[] = [];
+  const loaded: LoadedPlugin[] = [];
+  const failed: InstalledPluginSummary[] = [];
   settled.forEach((result, index) => {
+    const summary = summaries[index];
     if (result.status === "fulfilled") {
-      plugins.push(result.value);
+      loaded.push(result.value);
     } else {
-      const summary = summaries[index];
+      const message = result.reason instanceof Error
+        ? result.reason.message
+        : String(result.reason);
       console.warn(
-        `Plugin "${summary?.id ?? "(unknown)"}" failed to load and was skipped: ${
-          result.reason instanceof Error ? result.reason.message : String(result.reason)
-        }`
+        `Plugin "${summary?.id ?? "(unknown)"}" failed to load and was skipped: ${message}`
       );
+      if (summary) {
+        failed.push({ ...summary, loadError: message });
+      }
     }
   });
-  validatePluginSet(plugins, { ...options, strict: false });
-  return plugins;
+  validatePluginSet(loaded, { ...options, strict: false });
+  return { loaded, failed };
 }
 
 export async function importPluginFromSource(

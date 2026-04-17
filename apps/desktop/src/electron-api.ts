@@ -32,6 +32,7 @@ export interface InstalledPluginSummary {
   repoDir: string;
   componentCount: number;
   sceneCount: number;
+  loadError?: string;
 }
 
 export interface SetupFfmpegResult {

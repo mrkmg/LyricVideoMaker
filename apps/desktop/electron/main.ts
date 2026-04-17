@@ -16,7 +16,7 @@ import {
 } from "./services/layout-preferences";
 import { PreviewWorkerClient } from "./services/preview/worker-client";
 import { createPluginCatalog } from "./services/plugin-catalog";
-import { loadInstalledPlugins } from "./services/plugin-library";
+import { loadInstalledPluginsWithStatus } from "./services/plugin-library";
 import { createRenderHistory } from "./services/render-history";
 import { createSceneCatalog } from "./services/scene-catalog";
 import { loadUserScenes } from "./services/scene-library";
@@ -65,11 +65,10 @@ app.whenReady().then(async () => {
   await layoutPreferencesStore.load();
   const userScenes = await loadUserScenes(app.getPath("userData"));
   sceneCatalog.replaceAll(userScenes);
-  pluginCatalog.replaceAll(
-    await loadInstalledPlugins(app.getPath("userData"), {
-      existingSceneIds: userScenes.map((scene) => scene.id)
-    })
-  );
+  const pluginLoadResult = await loadInstalledPluginsWithStatus(app.getPath("userData"), {
+    existingSceneIds: userScenes.map((scene) => scene.id)
+  });
+  pluginCatalog.replaceAll(pluginLoadResult.loaded, pluginLoadResult.failed);
 
   const ffmpegAvailability = await initializeFfmpeg(layoutPreferencesStore);
   previewWorkerClient.start();

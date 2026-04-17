@@ -389,6 +389,40 @@
   color: var(--text-muted);
 }
 
+.plugin-row-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.plugin-row-badge {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.12rem 0.45rem;
+  border-radius: 999px;
+  background: rgba(239, 68, 68, 0.15);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+}
+
+.plugin-row-incompatible > div:first-child strong,
+.plugin-row-incompatible > div:first-child > p {
+  text-decoration: line-through;
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
+.plugin-row-incompatible .plugin-row-error {
+  text-decoration: none;
+  color: #fca5a5;
+  opacity: 1;
+  font-size: 0.82rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .inspector-panel {
   overflow: auto;
 }

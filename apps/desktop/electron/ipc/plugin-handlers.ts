@@ -3,7 +3,7 @@ import { builtInSceneComponents, builtInScenes } from "@lyric-video-maker/scene-
 import { createBootstrapData } from "../services/bootstrap-data";
 import {
   importPluginFromSource,
-  loadInstalledPlugins,
+  loadInstalledPluginsWithStatus,
   removePlugin,
   updatePlugin
 } from "../services/plugin-library";
@@ -64,11 +64,10 @@ export function registerPluginHandlers({
       pluginCatalog.upsert(plugin);
     } catch (error) {
       // Restore catalog from disk since we removed the plugin entry.
-      pluginCatalog.replaceAll(
-        await loadInstalledPlugins(getUserDataPath(), {
-          existingSceneIds: sceneCatalog.list().map((scene) => scene.id)
-        })
-      );
+      const restored = await loadInstalledPluginsWithStatus(getUserDataPath(), {
+        existingSceneIds: sceneCatalog.list().map((scene) => scene.id)
+      });
+      pluginCatalog.replaceAll(restored.loaded, restored.failed);
       throw error;
     }
     await previewWorkerClient.disposePreview();
