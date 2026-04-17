@@ -30,6 +30,21 @@ const result = await build({
     "@lyric-video-maker/core": resolve(root, "packages/core/src/index.ts"),
     "@lyric-video-maker/plugin-base": resolve(root, "packages/plugin-base/src/index.ts"),
     "~scene-registry": resolve(root, "packages/scene-registry/src"),
+    // Force every `import ... from "react"` / "react-dom" / "react/jsx-runtime"
+    // in this bundle to resolve to the renderer package's copy. npm workspace
+    // hoisting leaves multiple react installs around the monorepo (renderer's
+    // 18.3.1, scene-registry's 18.3.1, root 19.x) and esbuild's resolver picks
+    // the closest one per import path -- which ends up bundling 3 copies of
+    // React, each with its own ReactCurrentDispatcher. Hooks called through
+    // one copy crash ("Cannot read properties of null (reading 'useState')")
+    // because react-dom sets the dispatcher on a different copy. Aliasing
+    // collapses all react references to a single instance.
+    "react": resolve(root, "packages/renderer/node_modules/react"),
+    "react-dom": resolve(root, "packages/renderer/node_modules/react-dom"),
+    "react/jsx-runtime": resolve(
+      root,
+      "packages/renderer/node_modules/react/jsx-runtime.js"
+    ),
   },
   define: {
     "process.env.NODE_ENV": '"production"',

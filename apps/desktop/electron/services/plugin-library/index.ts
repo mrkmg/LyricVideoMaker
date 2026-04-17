@@ -20,6 +20,8 @@ import type {
   SceneDefinition
 } from "@lyric-video-maker/core";
 import React from "react";
+import * as ReactDOM from "react-dom";
+import * as PluginBaseRuntime from "@lyric-video-maker/plugin-base";
 import {
   builtInModifiers,
   builtInSceneComponents,
@@ -273,7 +275,7 @@ async function loadPluginFromRepo(url: string, repoDir: string): Promise<LoadedP
   const manifest = await readPluginManifest(repoDir);
   const entryPath = resolveManifestPath(repoDir, manifest.entry, "entry");
   const bundleSource = await readFile(entryPath, "utf-8");
-  const moduleExports = loadPluginModule(entryPath);
+  const moduleExports = loadPluginModule(entryPath, bundleSource);
   const registeredModifiers: ModifierDefinition<Record<string, unknown>>[] = [];
   const activation = moduleExports.activate?.({
     React,
@@ -311,11 +313,30 @@ async function loadPluginFromRepo(url: string, repoDir: string): Promise<LoadedP
   };
 }
 
-function loadPluginModule(entryPath: string): PluginModule {
-  const require = createRequire(entryPath);
-  const resolved = require.resolve(entryPath);
-  delete require.cache[resolved];
-  const moduleExports = require(resolved) as PluginModule;
+function loadPluginModule(entryPath: string, source: string): PluginModule {
+  // Plugin bundles externalize `react`, `react-dom`, and
+  // `@lyric-video-maker/plugin-base` — see PLUGINS.md. The host supplies
+  // its own copies of each through this require shim so the plugin
+  // module's `require(...)` calls resolve even though the plugin repo
+  // has no node_modules. Anything else falls back to a normal
+  // createRequire scoped to the plugin's entry path so the plugin can
+  // still load files next to itself if it ever needs to.
+  const fallback = createRequire(entryPath);
+  const shim = (specifier: string): unknown => {
+    if (specifier === "react") return React;
+    if (specifier === "react-dom") return ReactDOM;
+    if (specifier === "@lyric-video-maker/plugin-base") return PluginBaseRuntime;
+    return fallback(specifier);
+  };
+  const mod: { exports: Record<string, unknown> } = { exports: {} };
+  const wrapper = new Function("module", "exports", "require", source);
+  try {
+    wrapper(mod, mod.exports, shim);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Plugin entry "${entryPath}" threw during load: ${message}`);
+  }
+  const moduleExports = mod.exports as PluginModule;
   if (!moduleExports || typeof moduleExports !== "object") {
     throw new Error(`Plugin entry "${entryPath}" did not export an object.`);
   }

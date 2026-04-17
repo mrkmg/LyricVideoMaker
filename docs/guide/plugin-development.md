@@ -159,6 +159,11 @@ export default defineConfig({
   outDir: "dist",
   clean: true,
   dts: false,
+  // React and plugin-base are provided by the host at load time. Bundling
+  // them would produce duplicate React instances (invalid-hook-call) and
+  // drag Node-only globals like `process.env.NODE_ENV` into the browser
+  // eval context. Keep them external.
+  external: ["react", "react-dom", "@lyric-video-maker/plugin-base"],
   outExtension() {
     return { js: ".cjs" };
   },

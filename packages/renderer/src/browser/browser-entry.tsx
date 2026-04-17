@@ -18,6 +18,12 @@
 import React from "react";
 import "./react-shell";
 
+// Plugin-base runtime helpers — re-exposed to external plugins via host.pluginBase
+// so plugins can `import { useContainerSize } from "@lyric-video-maker/plugin-base"`
+// without bundling their own React. tsup externalizes plugin-base in plugin
+// builds; the loader's require shim resolves it to this namespace.
+import * as pluginBaseRuntime from "@lyric-video-maker/plugin-base";
+
 // Built-in component definitions (all browser-safe — no Node.js deps)
 // Paths use the ~scene-registry alias resolved by the build script.
 import { backgroundColorComponent } from "~scene-registry/components/background-color";
@@ -69,6 +75,10 @@ registerModifier(visibilityModifier.id, visibilityModifier);
         if (!definition || typeof definition !== "object" || !definition.id) return;
         registerModifier(definition.id, definition);
       }
-    }
+    },
+    // Runtime bag exposed to the loader's require shim. Plugins import from
+    // "@lyric-video-maker/plugin-base" and the shim returns this object so
+    // the host's React (and plugin-base build) is reused — no duplicate React.
+    pluginBase: pluginBaseRuntime
   };
 };

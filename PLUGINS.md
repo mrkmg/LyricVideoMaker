@@ -119,9 +119,15 @@ Create `lyric-video-plugin.json`:
 Build and commit the output:
 
 ```bash
-npx tsup src/plugin.ts --format cjs --out-dir dist --out-extension .cjs
+npx tsup src/plugin.ts --format cjs --out-dir dist --out-extension .cjs \
+  --external react --external react-dom --external @lyric-video-maker/plugin-base
 git add dist/plugin.cjs
 ```
+
+> **Important:** `react`, `react-dom`, and `@lyric-video-maker/plugin-base`
+> must be external. The host injects its own copies at load time — bundling
+> them causes duplicate React instances (invalid-hook-call) and breaks the
+> browser eval context (`process` is undefined).
 
 ---
 
@@ -189,6 +195,11 @@ export default defineConfig({
   outDir: "dist",
   clean: true,
   dts: false,
+  // React and plugin-base are provided by the host at load time. Bundling
+  // them would produce duplicate React instances (invalid-hook-call) and
+  // drag Node-only globals like `process.env.NODE_ENV` into the browser
+  // eval context. Keep them external.
+  external: ["react", "react-dom", "@lyric-video-maker/plugin-base"],
   outExtension() {
     return { js: ".cjs" };
   }
@@ -1025,7 +1036,13 @@ npm run build    # Produces dist/plugin.cjs
 ```
 
 The output must be a single `.cjs` file. Do not rely on external `node_modules`
-at runtime — bundle everything except React (provided by the host).
+at runtime — bundle everything except `react`, `react-dom`, and
+`@lyric-video-maker/plugin-base`. Those three are provided by the host and
+resolved by the loader's `require` shim when the plugin is evaluated inside
+the render browser. Bundling them causes duplicate React instances
+(invalid-hook-call errors from hooks like `useContainerSize`) and pulls
+Node-only `process.env.NODE_ENV` checks into a browser `new Function` eval
+context that has no `process`.
 
 ---
 

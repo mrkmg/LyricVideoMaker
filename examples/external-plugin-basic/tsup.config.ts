@@ -6,12 +6,12 @@ export default defineConfig({
   outDir: "dist",
   clean: true,
   dts: false,
-  // Plugin bundles are `new Function`-evaluated inside headless Chromium, where
-  // `process` does not exist. Replace the dev check React uses so the bundled
-  // react entry never evaluates a `process.env.NODE_ENV` lookup at call time.
-  define: {
-    "process.env.NODE_ENV": JSON.stringify("production")
-  },
+  // Plugin bundles are `new Function`-evaluated inside headless Chromium,
+  // where `process` does not exist and where the host already ships its own
+  // React + plugin-base runtime. Externalize both so the plugin CJS emits
+  // require("react") / require("@lyric-video-maker/plugin-base") calls that
+  // the host loader's require shim resolves to the host copies.
+  external: ["react", "react-dom", "@lyric-video-maker/plugin-base"],
   outExtension() {
     return { js: ".cjs" };
   }

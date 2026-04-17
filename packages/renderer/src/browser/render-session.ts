@@ -169,15 +169,33 @@ async function activatePluginInBrowser(
       }
     );
 
-    const host = register.__getPluginHost?.();
+    const host = register.__getPluginHost?.() as
+      | {
+          React: unknown;
+          pluginBase: unknown;
+          modifiers: unknown;
+          core: unknown;
+        }
+      | undefined;
     if (!host) {
       throw new Error("Plugin host not available in browser page.");
     }
 
+    // require shim: plugin bundles externalize "react" and
+    // "@lyric-video-maker/plugin-base" so they resolve to the host's
+    // copies at load time. This prevents duplicate React instances
+    // (invalid-hook-call) and keeps `process.env.NODE_ENV` out of
+    // plugin.cjs entirely.
+    const requireShim = (id: string): unknown => {
+      if (id === "react") return host.React;
+      if (id === "@lyric-video-maker/plugin-base") return host.pluginBase;
+      throw new Error(`Plugin require() for "${id}" is not supported.`);
+    };
+
     // Evaluate the CJS bundle in a CommonJS-like wrapper
     const mod = { exports: {} as Record<string, unknown> };
-    const wrapper = new Function("module", "exports", source);
-    wrapper(mod, mod.exports);
+    const wrapper = new Function("module", "exports", "require", source);
+    wrapper(mod, mod.exports, requireShim);
 
     // Call activate(host) to get component definitions (host.modifiers.register
     // may also have been called directly during activate — see browser-entry).
